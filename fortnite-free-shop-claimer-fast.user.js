@@ -10,6 +10,8 @@
 // @grant        unsafeWindow
 // @run-at       document-start
 // @license MIT
+// @downloadURL https://update.greasyfork.org/scripts/606718/Fortnite%20Free%20Shop%20Claimer%20%28Fast%29.user.js
+// @updateURL https://update.greasyfork.org/scripts/606718/Fortnite%20Free%20Shop%20Claimer%20%28Fast%29.meta.js
 // ==/UserScript==
 (function () {
   'use strict';
