@@ -1,13 +1,17 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer
 // @namespace    https://github.com/shdwgod
-// @version      1.0
-// @description  Automatically claims free bundles and items in the Fortnite Item Shop.
+// @version      1.3
+// @description  Automatically claims free bundles and items in the Fortnite Item Shop (bundles first, works from a background tab).
 // @author       shdw
 // @match        https://www.fortnite.com/item-shop*
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @run-at       document-idle
+// @grant        unsafeWindow
+// @run-at       document-start
+// @license MIT
+// @downloadURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.user.js
+// @updateURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.meta.js
 // ==/UserScript==
 
 (function () {
@@ -15,19 +19,35 @@
 
   const CFG = {
     actionDelayMs: 700,
-    scrollStepPx: 1800,
-    scrollDelayMs: 450,
-    maxScrollSteps: 60,
-    detailTimeoutMs: 8000,
-    purchaseTimeoutMs: 15000,
+    scrollStepRatio: 0.8,
+    scrollDelayMs: 400,
+    maxScrollSteps: 150,
+
+    catalogTimeoutMs: 15000,
+    detailTimeoutMs: 12000,
+    purchaseTimeoutMs: 20000,
+    growTimeoutMs: 2500,
+
+    maxReloads: 2,
+    stuckMs: 60000,
+    idleKickMs: 20000,
+    planTtlMs: 30 * 60 * 1000,
+
     maxLogLines: 4,
     jitter: [0.7, 1.5],
+
+    backgroundMode: true,
   };
 
-  const SESSION_KEYS = {
-    processed: 'fn_claimer_processed',
-    lastCatalog: 'fn_claimer_last_catalog',
-    scroll: 'fn_claimer_scroll',
+  const SS = {
+    processed: 'fn_claimer_processed2',
+    plan: 'fn_claimer_plan',
+    current: 'fn_claimer_current',
+    catalog: 'fn_claimer_catalog',
+    attempts: 'fn_claimer_attempts2',
+    stats: 'fn_claimer_stats',
+    logs: 'fn_claimer_logs',
+    bgWarned: 'fn_claimer_bgwarn',
   };
   const GM_KEYS = {
     enabled: 'fn_claimer_enabled',
@@ -35,6 +55,8 @@
     pos: 'fn_claimer_pos',
     collapsed: 'fn_claimer_collapsed',
   };
+
+  const pageWin = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
   const store = {
     get(key, fallback) {
@@ -45,7 +67,110 @@
     },
   };
 
-  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const ss = {
+    get(key, fallback) {
+      try {
+        const raw = sessionStorage.getItem(key);
+        return raw == null ? fallback : JSON.parse(raw);
+      } catch (e) {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    },
+    del(key) {
+      try { sessionStorage.removeItem(key); } catch (e) {}
+    },
+  };
+
+  const realVisibility = (() => {
+    try {
+      const d = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+      return () => d.get.call(document);
+    } catch (e) {
+      return () => document.visibilityState;
+    }
+  })();
+  const isReallyHidden = () => realVisibility() === 'hidden';
+
+  function keepPageAwake() {
+    if (!CFG.backgroundMode) return;
+    try {
+      const doc = pageWin.document;
+      const fake = (prop, value) =>
+        Object.defineProperty(doc, prop, { configurable: true, get: () => value });
+      fake('hidden', false);
+      fake('visibilityState', 'visible');
+      fake('webkitHidden', false);
+      fake('webkitVisibilityState', 'visible');
+      doc.hasFocus = () => true;
+
+      const swallow = (e) => {
+        const t = e.target;
+        if (!t || !t.nodeType || t.nodeType === 9) e.stopImmediatePropagation();
+      };
+      for (const type of ['visibilitychange', 'webkitvisibilitychange', 'blur']) {
+        pageWin.addEventListener(type, swallow, true);
+      }
+    } catch (e) {
+      console.warn('[FN Claimer] visibility spoof unavailable', e);
+    }
+  }
+
+  function holdLock() {
+    if (!CFG.backgroundMode) return;
+    try {
+      if (!navigator.locks) return;
+      navigator.locks
+        .request('fn-claimer-keepalive', { mode: 'shared' }, () => new Promise(() => {}))
+        .catch(() => {});
+    } catch (e) {}
+  }
+
+  const Ticker = (() => {
+    let worker = null;
+    let seq = 0;
+    const waiting = new Map();
+
+    try {
+      const src = 'self.onmessage=function(e){var d=e.data;setTimeout(function(){self.postMessage(d.id)},d.ms)}';
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      worker = new Worker(url);
+      worker.onmessage = (e) => {
+        const finish = waiting.get(e.data);
+        if (finish) finish();
+      };
+      worker.onerror = () => { worker = null; };
+    } catch (e) {
+      worker = null;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => {
+        const id = ++seq;
+        let timer = 0;
+        const finish = () => {
+          if (!waiting.has(id)) return;
+          waiting.delete(id);
+          clearTimeout(timer);
+          resolve();
+        };
+        waiting.set(id, finish);
+        timer = setTimeout(finish, ms);
+        if (worker) {
+          try { worker.postMessage({ id, ms }); } catch (e) {}
+        }
+      });
+    }
+
+    return { sleep, get active() { return !!worker; } };
+  })();
+
+  const sleep = Ticker.sleep;
+
+  keepPageAwake();
+  holdLock();
 
   const pause = (ms) => {
     const [lo, hi] = CFG.jitter;
@@ -55,7 +180,8 @@
   async function waitFor(fn, timeoutMs, intervalMs = 300) {
     const end = Date.now() + timeoutMs;
     while (Date.now() < end) {
-      const result = fn();
+      let result = null;
+      try { result = fn(); } catch (e) {}
       if (result) return result;
       await sleep(intervalMs);
     }
@@ -64,36 +190,29 @@
 
   const cleanUrl = (url) => url.split('?')[0].split('#')[0].replace(/\/+$/, '');
 
-  function getProcessed() {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEYS.processed) || '[]'); }
-    catch (e) { return []; }
-  }
+  const getProcessed = () => ss.get(SS.processed, []);
 
   function markProcessed(url) {
     const list = getProcessed();
     const clean = cleanUrl(url);
     if (!list.includes(clean)) {
       list.push(clean);
-      sessionStorage.setItem(SESSION_KEYS.processed, JSON.stringify(list));
+      ss.set(SS.processed, list);
     }
   }
 
-  function readScroll() {
-    try {
-      const data = JSON.parse(sessionStorage.getItem(SESSION_KEYS.scroll) || 'null');
-      return data && data.url === cleanUrl(location.href) ? data.y : 0;
-    } catch (e) {
-      return 0;
-    }
+  function bumpAttempts(key) {
+    const map = ss.get(SS.attempts, {});
+    map[key] = (map[key] || 0) + 1;
+    ss.set(SS.attempts, map);
+    return map[key];
   }
 
-  function writeScroll(y) {
-    try {
-      sessionStorage.setItem(
-        SESSION_KEYS.scroll,
-        JSON.stringify({ url: cleanUrl(location.href), y: Math.round(y) })
-      );
-    } catch (e) {}
+  function clearAttempts(key) {
+    const map = ss.get(SS.attempts, {});
+    if (!(key in map)) return;
+    delete map[key];
+    ss.set(SS.attempts, map);
   }
 
   const RX = {
@@ -102,9 +221,12 @@
     confirm: /^(confirm|potwierd[zź])/i,
     cancel: /cancel purchase|anuluj zakup/i,
     ownedLine: /^(owned|posiadane)/im,
+    ownedTile: /(?:^|\n)\s*(?:owned|posiadane)\s*(?:\n|$)/i,
     bundle: /bundle|pakiet|zestaw/i,
     priceFree: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|0)(?![\d.,])/i,
+    priceAny: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|[\d.,]+)/i,
     freeLine: /(?:^|\n)\s*(?:FREE|DARMOWE|BEZPŁATNE)\s*(?:\n|$)/i,
+    freeWord: /^(?:free|darmowe|bezpłatne)$/i,
   };
 
   const mainText = () => (document.querySelector('main') || document.body).innerText || '';
@@ -117,18 +239,97 @@
     );
   }
 
-  function isOwned() {
-    const hasCancel = allButtons().some((b) => RX.cancel.test(btnText(b)));
-    return hasCancel || RX.ownedLine.test(mainText());
+  const hasCancelButton = () => allButtons().some((b) => RX.cancel.test(btnText(b)));
+
+  const ownedNow = () => hasCancelButton() || (RX.ownedLine.test(mainText()) && !findButton(RX.buy));
+
+  function readVerdict() {
+    if (hasCancelButton()) return 'owned';
+    const text = mainText();
+    const buy = findButton(RX.buy);
+    if (RX.priceFree.test(text)) return buy ? 'free' : null;
+    if (buy) return RX.priceAny.test(text) ? 'paid' : null;
+    return RX.ownedLine.test(text) && !RX.priceAny.test(text) ? 'owned' : null;
   }
 
   function isDetailPage() {
     const path = location.pathname;
+    const cur = ss.get(SS.current, null);
     return (
+      !!(cur && cleanUrl(cur.href) === cleanUrl(location.href)) ||
       /\/item-shop\/.+\/[a-z0-9-]{8,}/i.test(path) ||
       /\/item-shop\/(offers|bundles|jam-tracks|outfits|emotes|pickaxes|wraps|kicks|wheels|sidekicks)\/[^/]+/i.test(path)
     );
   }
+
+  const pageTitle = () =>
+    (((document.querySelector('h1') || {}).innerText || document.title || 'Offer').trim().split('\n')[0]);
+
+  function shopLinks() {
+    return Array.from(document.querySelectorAll('a[href*="/item-shop/"]')).filter((a) => {
+      const href = cleanUrl(a.href);
+      return !href.endsWith('/item-shop') && !href.endsWith('/v-bucks');
+    });
+  }
+
+  function tileSignals(a, text) {
+    const alts = Array.from(a.querySelectorAll('img[alt]')).map((i) => i.alt);
+    return [text, a.getAttribute('aria-label'), a.getAttribute('title'), ...alts, a.href]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  function tileTitle(text) {
+    const line = text.split('\n').map((s) => s.trim()).find((s) => s && !RX.freeWord.test(s));
+    return line || 'Item';
+  }
+
+  function findCandidates() {
+    const processed = getProcessed();
+    const seen = new Set();
+    const out = [];
+
+    for (const a of shopLinks()) {
+      const href = cleanUrl(a.href);
+      if (seen.has(href) || processed.includes(href)) continue;
+
+      const text = (a.innerText || '').trim();
+      const free = RX.priceFree.test(text) || RX.freeLine.test(text);
+      if (!free || RX.ownedTile.test(text)) continue;
+
+      seen.add(href);
+      out.push({
+        url: a.href,
+        href,
+        title: tileTitle(text),
+        bundle: RX.bundle.test(tileSignals(a, text)),
+      });
+    }
+    return out;
+  }
+
+  const atBottom = () =>
+    window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300;
+
+  function nudgeScroll() {
+    if (!CFG.backgroundMode || !isReallyHidden()) return;
+    try { pageWin.dispatchEvent(new Event('scroll')); } catch (e) {}
+  }
+
+  function setSnapOff(off) {
+    let st = document.getElementById('fn-claimer-nosnap');
+    if (off && !st) {
+      st = document.createElement('style');
+      st.id = 'fn-claimer-nosnap';
+      st.textContent = '*{scroll-snap-type:none!important;scroll-behavior:auto!important}';
+      (document.head || document.documentElement).appendChild(st);
+    } else if (!off && st) {
+      st.remove();
+    }
+  }
+
+  let lastActivity = Date.now();
+  const touch = () => { lastActivity = Date.now(); };
 
   const CSS = `
     :host { all: initial; }
@@ -295,7 +496,8 @@
   const ui = (() => {
     let host = null;
     const el = {};
-    const logs = [];
+    const saved = ss.get(SS.logs, []);
+    const logs = Array.isArray(saved) ? saved : [];
 
     const h = (tag, props = {}, ...kids) => {
       const node = document.createElement(tag);
@@ -342,6 +544,7 @@
     }
 
     function mount() {
+      if (!document.body) return;
       if (host && host.isConnected) return;
       if (host) { document.body.appendChild(host); return; }
 
@@ -376,8 +579,8 @@
       const ringSvg = document.createElementNS(SVG_NS, 'svg');
       ringSvg.setAttribute('viewBox', '0 0 64 64');
       ringSvg.append(ringTrack, el.ringFill);
-      el.ringText = h('div', { class: 'ring-text' }, '0%');
-      const ring = h('div', { class: 'ring', title: 'Shop scroll position' }, ringSvg, el.ringText);
+      el.ringText = h('div', { class: 'ring-text' }, '–');
+      const ring = h('div', { class: 'ring', title: 'Scan progress / queue position' }, ringSvg, el.ringText);
 
       const hero = h('div', { class: 'hero' },
         h('div', {}, el.total, h('div', { class: 'total-label' }, 'Claimed all time')),
@@ -405,7 +608,7 @@
       );
 
       el.scan = h('button', { class: 'btn' }, icon('scan', 15), 'Rescan');
-      el.reset = h('button', { class: 'btn', title: 'Forget processed offers and scroll position' }, icon('clear', 15), 'Clear history');
+      el.reset = h('button', { class: 'btn', title: 'Forget processed offers, the queue and the session counters' }, icon('clear', 15), 'Clear history');
 
       el.body = h('div', { class: 'body' }, hero, chips, el.status, el.feed, switchRow, h('div', { class: 'actions' }, el.scan, el.reset));
       el.panel = h('div', { class: 'panel' }, h('div', { class: 'rail' }), el.head, el.body);
@@ -433,11 +636,12 @@
         return;
       }
       el.feed.replaceChildren(
-        ...logs.map((l) => h('li', { class: l.kind }, h('span', { class: 'msg' }, l.text), h('time', {}, l.t)))
+        ...logs.map((l) => h('li', { class: l.kind }, h('span', { class: 'msg', title: l.text }, l.text), h('time', {}, l.t)))
       );
     }
 
     function setStatus(text, kind = 'idle') {
+      touch();
       if (!el.panel) return;
       el.statusText.textContent = text;
       el.statusText.title = text;
@@ -457,233 +661,353 @@
       el.skipped.textContent = skipped;
     }
 
-    function setProgress(fraction) {
+    function setProgress(fraction, label) {
       if (!el.panel) return;
       const f = Math.min(1, Math.max(0, fraction));
       el.ringFill.style.strokeDashoffset = String(RING_C * (1 - f));
-      el.ringText.textContent = Math.round(f * 100) + '%';
+      el.ringText.textContent = label != null ? label : Math.round(f * 100) + '%';
     }
 
     function log(text, kind = '') {
-      if (!el.panel) return;
+      touch();
       logs.unshift({ t: clock(), text, kind });
       logs.length = Math.min(logs.length, CFG.maxLogLines);
+      ss.set(SS.logs, logs);
       renderFeed();
     }
 
-    return { mount, setStatus, setEnabled, setStats, setProgress, log, get el() { return el; } };
+    function clearLogs() {
+      logs.length = 0;
+      ss.set(SS.logs, logs);
+      renderFeed();
+    }
+
+    return { mount, setStatus, setEnabled, setStats, setProgress, log, clearLogs, get el() { return el; } };
   })();
 
+  const savedStats = ss.get(SS.stats, {});
   const state = {
     enabled: store.get(GM_KEYS.enabled, true),
     total: store.get(GM_KEYS.total, store.get('fn_bot_v22_count', 0)),
-    session: 0,
-    skipped: 0,
+    session: savedStats.session || 0,
+    skipped: savedStats.skipped || 0,
   };
+
+  const saveStats = () => ss.set(SS.stats, { session: state.session, skipped: state.skipped });
+  const refreshStats = () => ui.setStats(state.total, state.session, state.skipped);
 
   let navToken = 0;
   let busy = false;
-  let kickTimer = null;
-  let trackScroll = false;
-  let scrollTimer = null;
+  let finished = false;
+  let failStreak = 0;
+  let kickId = 0;
 
-  const refreshStats = () => ui.setStats(state.total, state.session, state.skipped);
-
-  function updateProgress() {
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    ui.setProgress(max > 0 ? window.scrollY / max : 0);
-  }
-
-  function skip(message) {
+  function skip(message, kind = '') {
     state.skipped++;
+    saveStats();
     refreshStats();
     ui.setStatus(message, 'idle');
-    ui.log(message);
+    ui.log(message, kind);
   }
 
-  function goBack() {
-    const last = sessionStorage.getItem(SESSION_KEYS.lastCatalog);
-    if (last && cleanUrl(last) !== cleanUrl(location.href)) {
-      location.href = last;
+  function claimed(label) {
+    state.total = store.get(GM_KEYS.total, state.total) + 1;
+    store.set(GM_KEYS.total, state.total);
+    state.session++;
+    saveStats();
+    refreshStats();
+    ui.setStatus(`Claimed: ${label}`, 'done');
+    ui.log(`Claimed: ${label}`, 'ok');
+  }
+
+  function loadPlan() {
+    const plan = ss.get(SS.plan, null);
+    if (!plan || !Array.isArray(plan.queue)) return null;
+    if (Date.now() - plan.createdAt > CFG.planTtlMs) { ss.del(SS.plan); return null; }
+    const processed = getProcessed();
+    plan.queue = plan.queue.filter((o) => !processed.includes(o.href));
+    return plan;
+  }
+
+  function renderPlan() {
+    const plan = ss.get(SS.plan, null);
+    if (plan && plan.total) {
+      const idx = Math.min(plan.total, plan.total - plan.queue.length);
+      ui.setProgress(idx / plan.total, `${idx}/${plan.total}`);
     } else {
-      history.back();
+      ui.setProgress(0, '–');
     }
+  }
+
+  function navigate(url) {
+    touch();
+    location.href = url;
+  }
+
+  function goNext() {
+    const plan = loadPlan();
+    if (!plan || !plan.queue.length) return false;
+    const offer = plan.queue.shift();
+    ss.set(SS.plan, plan);
+    ss.set(SS.current, offer);
+    renderPlan();
+    const kind = offer.bundle ? 'bundle' : 'item';
+    ui.setStatus(`Opening ${kind}: ${offer.title}`, 'work');
+    ui.log(`Opening ${kind}: ${offer.title}`);
+    navigate(offer.url);
+    return true;
+  }
+
+  async function finishOffer(offer, alive) {
+    markProcessed(offer.href);
+    ss.del(SS.current);
+    await pause(700);
+    if (!alive()) return;
+    if (!goNext()) navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
   }
 
   async function handleDetail(alive) {
-    markProcessed(location.href);
+    const url = location.href;
+    const stored = ss.get(SS.current, null);
+    const offer = stored && cleanUrl(stored.href) === cleanUrl(url)
+      ? stored
+      : { url, href: cleanUrl(url), title: pageTitle(), bundle: RX.bundle.test(url) };
+    const kind = offer.bundle ? 'bundle' : 'item';
+    const attemptKey = 'detail:' + offer.href;
 
-    ui.setStatus('Checking offer…', 'work');
-    await waitFor(
-      () => findButton(RX.buy) || isOwned() || /price|cena/i.test(mainText()),
-      CFG.detailTimeoutMs
-    );
+    renderPlan();
+    ui.setStatus(`Checking ${kind}: ${offer.title}`, 'work');
+
+    let verdict = await waitFor(readVerdict, CFG.detailTimeoutMs);
     if (!alive()) return;
+    if (!verdict && ownedNow()) verdict = 'owned';
+
+    if (!verdict) {
+      const tries = bumpAttempts(attemptKey);
+      if (tries <= CFG.maxReloads) {
+        ui.setStatus(`Offer didn't load, retry ${tries}/${CFG.maxReloads}…`, 'work');
+        ui.log(`Reloading offer (${tries}/${CFG.maxReloads})`);
+        await pause(1500);
+        if (alive()) location.reload();
+        return;
+      }
+      clearAttempts(attemptKey);
+      skip(`Did not load: ${offer.title}`, 'err');
+      return finishOffer(offer, alive);
+    }
+    clearAttempts(attemptKey);
+
     await pause(CFG.actionDelayMs);
     if (!alive()) return;
+    verdict = readVerdict() || verdict;
 
-    if (isOwned()) {
-      skip('Already owned');
-      await pause(600);
-      return alive() && goBack();
+    if (verdict === 'paid') {
+      await pause(1200);
+      if (!alive()) return;
+      verdict = readVerdict() || verdict;
     }
 
-    if (!RX.priceFree.test(mainText())) {
-      skip('Not free, skipped');
-      await pause(600);
-      return alive() && goBack();
+    if (verdict === 'owned') {
+      skip(`Already owned: ${offer.title}`);
+      return finishOffer(offer, alive);
+    }
+    if (verdict !== 'free') {
+      skip(`Not free: ${offer.title}`);
+      return finishOffer(offer, alive);
     }
 
-    const buyBtn = findButton(RX.buy);
+    const buyBtn = findButton(RX.buy) || (await waitFor(() => findButton(RX.buy), 4000));
+    if (!alive()) return;
     if (!buyBtn) {
-      skip('No purchase button');
-      await pause(600);
-      return alive() && goBack();
+      skip(`No purchase button: ${offer.title}`);
+      return finishOffer(offer, alive);
     }
 
-    ui.setStatus('Claiming offer…', 'work');
+    ui.setStatus(`Claiming ${kind}: ${offer.title}`, 'work');
     buyBtn.click();
 
     const clicked = new WeakSet();
+    let dialogSeen = false;
+    let buyRetries = 0;
+    let lastBuyClick = Date.now();
+
     await waitFor(() => {
       if (!alive()) return true;
       for (const rx of [RX.cont, RX.confirm]) {
         const b = findButton(rx);
         if (b && !clicked.has(b)) {
           clicked.add(b);
+          dialogSeen = true;
           ui.setStatus(rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…', 'work');
           b.click();
         }
       }
-      return isOwned();
+      if (ownedNow()) return true;
+
+      if (!dialogSeen && buyRetries < 2 && Date.now() - lastBuyClick > 4000) {
+        const again = findButton(RX.buy);
+        if (again) {
+          buyRetries++;
+          lastBuyClick = Date.now();
+          ui.log(`Retrying purchase click (${buyRetries}/2)`);
+          again.click();
+        }
+      }
+      return false;
     }, CFG.purchaseTimeoutMs, 400);
     if (!alive()) return;
 
-    if (isOwned()) {
-      state.total++;
-      state.session++;
-      store.set(GM_KEYS.total, state.total);
-      refreshStats();
-      ui.setStatus('Claimed!', 'done');
-      ui.log('Offer claimed', 'ok');
-    } else {
-      skip('Purchase not confirmed');
-      ui.log('Purchase not confirmed', 'err');
-    }
+    if (ownedNow()) claimed(offer.title);
+    else skip(`Purchase not confirmed: ${offer.title}`, 'err');
 
     await pause(900);
-    if (alive()) goBack();
+    return finishOffer(offer, alive);
   }
 
-  function findCandidates() {
-    const processed = getProcessed();
-    const seen = new Set();
-    const out = [];
+  function updateScanProgress() {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    ui.setProgress(max > 0 ? window.scrollY / max : 0);
+  }
 
-    for (const a of document.querySelectorAll('a[href*="/item-shop/"]')) {
-      const href = cleanUrl(a.href);
-      if (href.endsWith('/item-shop') || href.endsWith('/v-bucks')) continue;
-      if (seen.has(href) || processed.includes(href)) continue;
+  async function scanShop(alive) {
+    const found = new Map();
+    const collect = () => {
+      for (const c of findCandidates()) if (!found.has(c.href)) found.set(c.href, c);
+    };
 
-      const text = (a.innerText || '').trim();
-      const free = RX.priceFree.test(text) || RX.freeLine.test(text);
-      if (!free || /owned|posiadan/i.test(text)) continue;
+    setSnapOff(true);
+    try {
+      window.scrollTo(0, 0);
+      await pause(CFG.scrollDelayMs);
 
-      seen.add(href);
-      out.push({
-        el: a,
-        href,
-        title: text.split('\n')[0] || 'Item',
-        isBundle: RX.bundle.test(text) || /bundle/i.test(href),
-      });
+      let bottomHits = 0;
+      let stuck = 0;
+      for (let step = 0; step < CFG.maxScrollSteps && alive(); step++) {
+        collect();
+        updateScanProgress();
+
+        if (atBottom()) {
+          ui.setStatus(`Scanning shop… ${found.size} free so far`, 'work');
+          const before = document.documentElement.scrollHeight;
+          nudgeScroll();
+          const grew = await waitFor(
+            () => document.documentElement.scrollHeight > before + 50,
+            CFG.growTimeoutMs,
+            250
+          );
+          if (grew) { bottomHits = 0; continue; }
+          if (++bottomHits >= 2) break;
+        } else {
+          bottomHits = 0;
+          ui.setStatus(`Scanning shop… ${found.size} free so far`, 'work');
+          const before = window.scrollY;
+          const stepPx = Math.max(300, Math.round(window.innerHeight * CFG.scrollStepRatio));
+          window.scrollBy({ top: stepPx, behavior: 'auto' });
+          nudgeScroll();
+          await pause(CFG.scrollDelayMs);
+          if (Math.abs(window.scrollY - before) < 5) {
+            if (++stuck >= 3) break;
+          } else {
+            stuck = 0;
+          }
+        }
+      }
+      collect();
+    } finally {
+      setSnapOff(false);
+      window.scrollTo(0, 0);
     }
-
-    out.sort((a, b) => Number(b.isBundle) - Number(a.isBundle));
-    return out;
-  }
-
-  async function openCandidate(target, alive) {
-    ui.setStatus(`Opening ${target.isBundle ? 'bundle' : 'item'}: ${target.title}`, 'work');
-    ui.log(`${target.isBundle ? 'Bundle' : 'Item'}: ${target.title}`);
-    writeScroll(window.scrollY);
-    await pause(500);
-    if (alive()) target.el.click();
-  }
-
-  async function restoreScroll(alive) {
-    const saved = readScroll();
-    if (saved < 200) return;
-    ui.setStatus('Restoring scroll position…', 'work');
-    for (let i = 0; i < 15 && alive(); i++) {
-      window.scrollTo(0, saved);
-      if (window.scrollY >= saved - 50) break;
-      await sleep(250);
-    }
-    updateProgress();
+    return alive() ? Array.from(found.values()) : null;
   }
 
   async function handleCatalog(alive) {
-    sessionStorage.setItem(SESSION_KEYS.lastCatalog, location.href);
-    ui.setStatus('Scanning shop…', 'work');
+    const attemptKey = 'catalog:' + cleanUrl(location.href);
+    ss.set(SS.catalog, location.href);
+    ss.del(SS.current);
+    finished = false;
+
+    if (goNext()) return;
+
+    ui.setStatus('Waiting for shop to load…', 'work');
+    const loaded = await waitFor(() => shopLinks().length > 0, CFG.catalogTimeoutMs);
+    if (!alive()) return;
+
+    if (!loaded) {
+      const tries = bumpAttempts(attemptKey);
+      if (tries <= CFG.maxReloads) {
+        ui.setStatus(`Shop didn't load, retry ${tries}/${CFG.maxReloads}…`, 'work');
+        ui.log(`Reloading shop (${tries}/${CFG.maxReloads})`);
+        await pause(1500);
+        if (alive()) location.reload();
+        return;
+      }
+      clearAttempts(attemptKey);
+      finished = true;
+      ui.setStatus('Shop did not load', 'error');
+      ui.log('Shop did not load', 'err');
+      return;
+    }
+    clearAttempts(attemptKey);
+
     await pause(CFG.actionDelayMs);
     if (!alive()) return;
 
-    await restoreScroll(alive);
-    if (!alive()) return;
-    trackScroll = true;
+    ss.del(SS.plan);
+    const found = await scanShop(alive);
+    if (!found) return;
 
-    let bottomHits = 0;
-    for (let step = 0; step < CFG.maxScrollSteps && alive(); step++) {
-      const candidates = findCandidates();
-      if (candidates.length) return openCandidate(candidates[0], alive);
+    const bundles = found.filter((o) => o.bundle);
+    const items = found.filter((o) => !o.bundle);
+    const queue = bundles.length ? bundles : items;
+    ui.log(`Found ${bundles.length} bundle(s), ${items.length} item(s)`, queue.length ? 'ok' : '');
 
-      const atBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300;
-
-      if (atBottom) {
-        if (++bottomHits >= 2) break;
-      } else {
-        bottomHits = 0;
-        ui.setStatus('Scrolling through shop…', 'work');
-        window.scrollBy({ top: CFG.scrollStepPx, behavior: 'auto' });
-      }
-      await pause(CFG.scrollDelayMs);
-    }
-
-    if (alive()) {
-      trackScroll = false;
-      writeScroll(0);
+    if (!queue.length) {
+      finished = true;
+      ui.setProgress(1, '✓');
       ui.setStatus('Done, no more free offers', 'done');
       ui.log('Scan finished', 'ok');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
+
+    ss.set(SS.plan, {
+      queue,
+      total: queue.length,
+      kind: bundles.length ? 'bundle' : 'item',
+      createdAt: Date.now(),
+    });
+    goNext();
   }
 
   async function run() {
     busy = true;
-    trackScroll = false;
+    touch();
     const myToken = navToken;
     const alive = () => myToken === navToken && state.enabled;
     try {
       ui.mount();
       if (isDetailPage()) await handleDetail(alive);
       else await handleCatalog(alive);
+      failStreak = 0;
     } catch (err) {
       console.error('[FN Claimer]', err);
       ui.setStatus('Error: ' + (err && err.message ? err.message : err), 'error');
       ui.log('Script error, see console', 'err');
+      if (++failStreak >= 3) {
+        finished = true;
+        ui.setStatus('Stopped after repeated errors', 'error');
+      }
     } finally {
       busy = false;
     }
   }
 
   function kick(delay = 600) {
-    clearTimeout(kickTimer);
-    kickTimer = setTimeout(() => {
-      if (!state.enabled) return;
+    const id = ++kickId;
+    sleep(delay).then(() => {
+      if (id !== kickId || !state.enabled) return;
       if (busy) return kick(400);
       run();
-    }, delay);
+    });
   }
 
   function setEnabled(value) {
@@ -695,9 +1019,46 @@
       ui.setStatus('Resuming…', 'work');
       kick(200);
     } else {
-      trackScroll = false;
       ui.setStatus('Paused', 'idle');
       ui.log('Auto-claim paused');
+    }
+  }
+
+  function resetShopState() {
+    ss.del(SS.processed);
+    ss.del(SS.plan);
+    ss.del(SS.current);
+    ss.del(SS.attempts);
+  }
+
+  async function watch() {
+    let lastUrl = location.href;
+
+    for (;;) {
+      await sleep(500);
+      ui.mount();
+
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        navToken++;
+        finished = false;
+        kick(700);
+        continue;
+      }
+      if (!state.enabled) continue;
+
+      if (finished) continue;
+
+      const idleFor = Date.now() - lastActivity;
+      if (busy && idleFor > CFG.stuckMs) {
+        navToken++;
+        touch();
+        ui.log('Run got stuck, restarting', 'err');
+        kick(300);
+      } else if (!busy && idleFor > CFG.idleKickMs) {
+        touch();
+        kick(300);
+      }
     }
   }
 
@@ -705,43 +1066,50 @@
     ui.mount();
     ui.setEnabled(state.enabled);
     refreshStats();
+    renderPlan();
     ui.setStatus(state.enabled ? 'Starting…' : 'Paused', 'idle');
-    updateProgress();
 
     ui.el.switchBtn.addEventListener('click', () => setEnabled(!state.enabled));
+
     ui.el.scan.addEventListener('click', () => {
       if (!state.enabled) return ui.log('Turn on auto-claim first');
-      writeScroll(0);
+      ss.del(SS.plan);
+      ss.del(SS.current);
+      ss.del(SS.attempts);
+      finished = false;
+      failStreak = 0;
       navToken++;
-      kick(100);
+      if (isDetailPage()) navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
+      else kick(100);
     });
+
     ui.el.reset.addEventListener('click', () => {
-      sessionStorage.removeItem(SESSION_KEYS.processed);
-      writeScroll(0);
+      resetShopState();
+      ss.del(SS.stats);
+      state.session = 0;
       state.skipped = 0;
       refreshStats();
+      renderPlan();
+      ui.clearLogs();
       ui.log('History cleared');
     });
 
-    window.addEventListener('scroll', () => {
-      updateProgress();
-      if (!trackScroll || isDetailPage()) return;
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => writeScroll(window.scrollY), 150);
-    }, { passive: true });
+    watch();
 
-    let lastUrl = location.href;
-    setInterval(() => {
-      ui.mount();
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        navToken++;
-        kick(700);
-      }
-    }, 500);
+    if (CFG.backgroundMode && !ss.get(SS.bgWarned, false)) {
+      sleep(1500).then(() => {
+        if (Ticker.active) return;
+        ss.set(SS.bgWarned, true);
+        ui.log('Worker timers blocked: background mode limited', 'err');
+      });
+    }
 
     if (state.enabled) kick(1000);
   }
 
-  init();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
 })();
