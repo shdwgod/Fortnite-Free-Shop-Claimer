@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer
 // @namespace    https://github.com/shdwgod
-// @version      1.3
-// @description  Automatically claims free bundles and items in the Fortnite Item Shop (bundles first, works from a background tab).
+// @version      1.4
+// @description  Automatically claims free bundles and items in the Fortnite Item Shop (bundles first, human-like pacing, works from a background tab).
 // @author       shdw
 // @match        https://www.fortnite.com/item-shop*
 // @grant        GM_setValue
@@ -13,7 +13,6 @@
 // @downloadURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.user.js
 // @updateURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.meta.js
 // ==/UserScript==
-
 (function () {
   'use strict';
 
@@ -37,6 +36,14 @@
     jitter: [0.7, 1.5],
 
     backgroundMode: true,
+
+    human: true,
+    betweenOffersMs: [2500, 7000],
+    thinkChance: 0.06,
+    thinkMs: [1500, 4500],
+    breakEvery: [3, 6],
+    breakMs: [20000, 60000],
+    shuffleQueue: true,
   };
 
   const SS = {
@@ -48,6 +55,7 @@
     stats: 'fn_claimer_stats',
     logs: 'fn_claimer_logs',
     bgWarned: 'fn_claimer_bgwarn',
+    pace: 'fn_claimer_pace',
   };
   const GM_KEYS = {
     enabled: 'fn_claimer_enabled',
@@ -172,9 +180,22 @@
   keepPageAwake();
   holdLock();
 
+  const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+  const randInt = (lo, hi) => Math.floor(rand(lo, hi + 1));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const gauss = () => {
+    let u = 0;
+    let v = 0;
+    while (!u) u = Math.random();
+    while (!v) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  };
+
   const pause = (ms) => {
     const [lo, hi] = CFG.jitter;
-    return sleep(Math.round(ms * (lo + Math.random() * (hi - lo))));
+    let t = ms * rand(lo, hi);
+    if (CFG.human && Math.random() < CFG.thinkChance) t += rand(CFG.thinkMs[0], CFG.thinkMs[1]);
+    return sleep(Math.round(t));
   };
 
   async function waitFor(fn, timeoutMs, intervalMs = 300) {
@@ -330,6 +351,197 @@
 
   let lastActivity = Date.now();
   const touch = () => { lastActivity = Date.now(); };
+
+  const cursor = {
+    x: Math.round(rand(160, Math.max(200, window.innerWidth - 160))),
+    y: Math.round(rand(120, Math.max(160, window.innerHeight - 120))),
+    el: null,
+  };
+
+  const hitTarget = (x, y) => document.elementFromPoint(x, y);
+
+  function fire(target, type, x, y, extra) {
+    let Ctor = MouseEvent;
+    if (type === 'wheel') Ctor = WheelEvent;
+    else if ((type.startsWith('pointer') || type === 'click') && typeof PointerEvent === 'function') Ctor = PointerEvent;
+
+    const opts = Object.assign(
+      {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: x,
+        clientY: y,
+        screenX: x + (window.screenX || 0),
+        screenY: y + (window.screenY || 0) + Math.max(0, window.outerHeight - window.innerHeight),
+        button: 0,
+        buttons: 0,
+      },
+      extra
+    );
+    if (Ctor === PointerEvent) {
+      Object.assign(opts, {
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        width: 1,
+        height: 1,
+        pressure: opts.buttons ? 0.5 : 0,
+      });
+    }
+
+    let ev;
+    try { ev = new Ctor(type, Object.assign({ view: pageWin }, opts)); }
+    catch (e) { ev = new Ctor(type, opts); }
+    target.dispatchEvent(ev);
+  }
+
+  async function moveCursor(tx, ty) {
+    const sx = cursor.x;
+    const sy = cursor.y;
+    const dist = Math.hypot(tx - sx, ty - sy);
+    const steps = clamp(Math.round(dist / 35) + randInt(0, 4), 6, 28);
+    const cx = (sx + tx) / 2 + rand(-0.2, 0.2) * dist;
+    const cy = (sy + ty) / 2 + rand(-0.2, 0.2) * dist;
+
+    for (let i = 1; i <= steps; i++) {
+      const p = i / steps;
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      const x = Math.round(clamp((1 - e) * (1 - e) * sx + 2 * (1 - e) * e * cx + e * e * tx, 1, window.innerWidth - 2));
+      const y = Math.round(clamp((1 - e) * (1 - e) * sy + 2 * (1 - e) * e * cy + e * e * ty, 1, window.innerHeight - 2));
+      const t = hitTarget(x, y) || document.body;
+
+      if (cursor.el !== t) {
+        if (cursor.el && cursor.el.isConnected) {
+          fire(cursor.el, 'pointerout', x, y);
+          fire(cursor.el, 'mouseout', x, y);
+        }
+        fire(t, 'pointerover', x, y);
+        fire(t, 'mouseover', x, y);
+        cursor.el = t;
+      }
+      fire(t, 'pointermove', x, y);
+      fire(t, 'mousemove', x, y);
+      cursor.x = x;
+      cursor.y = y;
+      await sleep(rand(9, 24));
+    }
+  }
+
+  async function humanScrollBy(px) {
+    if (!CFG.human) {
+      window.scrollBy({ top: px, behavior: 'auto' });
+      return;
+    }
+    const n = randInt(5, 9);
+    let done = 0;
+    for (let i = 1; i <= n; i++) {
+      const to = Math.round(px * (1 - Math.pow(1 - i / n, 2)));
+      const chunk = to - done;
+      if (chunk) {
+        const t = hitTarget(cursor.x, cursor.y) || document.body;
+        fire(t, 'wheel', cursor.x, cursor.y, { deltaY: chunk, deltaMode: 0 });
+        window.scrollBy({ top: chunk, behavior: 'auto' });
+        done = to;
+      }
+      await sleep(rand(14, 34));
+    }
+  }
+
+  async function humanClick(el) {
+    if (!CFG.human) { el.click(); return; }
+    try {
+      if (!el.isConnected) return;
+      let r = el.getBoundingClientRect();
+      if (r.top < 70 || r.bottom > window.innerHeight - 70) {
+        await humanScrollBy(Math.round(r.top + r.height / 2 - window.innerHeight / 2));
+        await sleep(rand(200, 500));
+        if (!el.isConnected) return;
+        r = el.getBoundingClientRect();
+      }
+
+      const x = Math.round(r.left + r.width * clamp(0.5 + gauss() * 0.16, 0.12, 0.88));
+      const y = Math.round(r.top + r.height * clamp(0.5 + gauss() * 0.16, 0.2, 0.8));
+      await moveCursor(x, y);
+      if (!el.isConnected) return;
+
+      const hit = hitTarget(x, y);
+      const t = hit && (hit === el || el.contains(hit)) ? hit : el;
+
+      await sleep(rand(70, 240));
+      fire(t, 'pointerdown', x, y, { buttons: 1 });
+      fire(t, 'mousedown', x, y, { buttons: 1 });
+      try { el.focus({ preventScroll: true }); } catch (e) {}
+      await sleep(rand(45, 140));
+      fire(t, 'pointerup', x, y);
+      fire(t, 'mouseup', x, y);
+      fire(t, 'click', x, y, { detail: 1 });
+      touch();
+    } catch (err) {
+      console.warn('[FN Claimer] humanClick fallback', err);
+      try { el.click(); } catch (e) {}
+    }
+  }
+
+  const reactClick = (el) =>
+    (CFG.human
+      ? sleep(rand(350, 900)).then(() => humanClick(el))
+      : Promise.resolve(el.click())
+    ).catch(() => {});
+
+  async function dwell() {
+    if (!CFG.human) return;
+    const n = randInt(1, 3);
+    for (let i = 0; i < n; i++) {
+      await moveCursor(
+        rand(80, Math.max(120, window.innerWidth - 80)),
+        rand(100, Math.max(140, window.innerHeight - 100))
+      );
+      await sleep(rand(250, 900));
+    }
+  }
+
+  function shuffled(list) {
+    if (!(CFG.human && CFG.shuffleQueue)) return list;
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  const getPace = () => {
+    const p = ss.get(SS.pace, null);
+    return p && p.limit ? p : { streak: 0, limit: randInt(CFG.breakEvery[0], CFG.breakEvery[1]) };
+  };
+
+  async function maybeBreak(alive) {
+    if (!CFG.human) return;
+    const p = getPace();
+    if (p.streak < p.limit) return;
+    const ms = Math.round(rand(CFG.breakMs[0], CFG.breakMs[1]));
+    ss.set(SS.pace, { streak: 0, limit: randInt(CFG.breakEvery[0], CFG.breakEvery[1]) });
+    const end = Date.now() + ms;
+    ui.log(`Break for ${Math.round(ms / 1000)}s`);
+    while (Date.now() < end && alive()) {
+      ui.setStatus(`Short break, ${Math.ceil((end - Date.now()) / 1000)}s`, 'idle');
+      await sleep(1000);
+    }
+  }
+
+  async function revealTile(url) {
+    const want = cleanUrl(url);
+    const find = () => shopLinks().find((a) => cleanUrl(a.href) === want);
+    let link = find();
+    if (link || isDetailPage()) return link || null;
+    for (let i = 0; !link && i < 40 && !atBottom(); i++) {
+      await humanScrollBy(Math.round(window.innerHeight * rand(0.6, 0.9)));
+      await sleep(rand(250, 500));
+      link = find();
+    }
+    return link || null;
+  }
 
   const CSS = `
     :host { all: initial; }
@@ -716,6 +928,9 @@
     state.session++;
     saveStats();
     refreshStats();
+    const pace = getPace();
+    pace.streak++;
+    ss.set(SS.pace, pace);
     ui.setStatus(`Claimed: ${label}`, 'done');
     ui.log(`Claimed: ${label}`, 'ok');
   }
@@ -739,12 +954,41 @@
     }
   }
 
-  function navigate(url) {
+  async function navigate(url) {
     touch();
+    if (CFG.human) {
+      const link = await revealTile(url);
+      if (link) {
+        await humanClick(link);
+        await sleep(2500);
+        if (cleanUrl(location.href) !== cleanUrl(url)) location.href = url;
+        return;
+      }
+    }
     location.href = url;
   }
 
-  function goNext() {
+  async function goCatalog() {
+    touch();
+    const url = ss.get(SS.catalog, location.origin + '/item-shop');
+    if (CFG.human) {
+      const want = cleanUrl(url);
+      const link = Array.from(document.querySelectorAll('a[href]')).find((a) => {
+        if (cleanUrl(a.href) !== want) return false;
+        const r = a.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      if (link) {
+        await humanClick(link);
+        await sleep(2500);
+        if (cleanUrl(location.href) !== want) location.href = url;
+        return;
+      }
+    }
+    location.href = url;
+  }
+
+  async function goNext() {
     const plan = loadPlan();
     if (!plan || !plan.queue.length) return false;
     const offer = plan.queue.shift();
@@ -754,7 +998,7 @@
     const kind = offer.bundle ? 'bundle' : 'item';
     ui.setStatus(`Opening ${kind}: ${offer.title}`, 'work');
     ui.log(`Opening ${kind}: ${offer.title}`);
-    navigate(offer.url);
+    await navigate(offer.url);
     return true;
   }
 
@@ -763,7 +1007,18 @@
     ss.del(SS.current);
     await pause(700);
     if (!alive()) return;
-    if (!goNext()) navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
+
+    if (CFG.human) {
+      await maybeBreak(alive);
+      if (!alive()) return;
+      ui.setStatus('Pausing before the next offer…', 'work');
+      await sleep(rand(CFG.betweenOffersMs[0], CFG.betweenOffersMs[1]));
+      if (!alive()) return;
+      await goCatalog();
+      return;
+    }
+
+    if (!(await goNext())) await navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
   }
 
   async function handleDetail(alive) {
@@ -823,8 +1078,14 @@
       return finishOffer(offer, alive);
     }
 
+    if (CFG.human) {
+      await dwell();
+      if (!alive()) return;
+    }
+
     ui.setStatus(`Claiming ${kind}: ${offer.title}`, 'work');
-    buyBtn.click();
+    await humanClick(findButton(RX.buy) || buyBtn);
+    if (!alive()) return;
 
     const clicked = new WeakSet();
     let dialogSeen = false;
@@ -839,7 +1100,7 @@
           clicked.add(b);
           dialogSeen = true;
           ui.setStatus(rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…', 'work');
-          b.click();
+          reactClick(b);
         }
       }
       if (ownedNow()) return true;
@@ -850,7 +1111,7 @@
           buyRetries++;
           lastBuyClick = Date.now();
           ui.log(`Retrying purchase click (${buyRetries}/2)`);
-          again.click();
+          humanClick(again).catch(() => {});
         }
       }
       return false;
@@ -901,14 +1162,18 @@
           bottomHits = 0;
           ui.setStatus(`Scanning shop… ${found.size} free so far`, 'work');
           const before = window.scrollY;
-          const stepPx = Math.max(300, Math.round(window.innerHeight * CFG.scrollStepRatio));
-          window.scrollBy({ top: stepPx, behavior: 'auto' });
+          const ratio = CFG.human ? rand(0.55, 0.95) : CFG.scrollStepRatio;
+          const stepPx = Math.max(300, Math.round(window.innerHeight * ratio));
+          await humanScrollBy(stepPx);
           nudgeScroll();
           await pause(CFG.scrollDelayMs);
           if (Math.abs(window.scrollY - before) < 5) {
             if (++stuck >= 3) break;
           } else {
             stuck = 0;
+            if (CFG.human && Math.random() < 0.08) {
+              await humanScrollBy(-Math.round(rand(80, 260)));
+            }
           }
         }
       }
@@ -926,7 +1191,7 @@
     ss.del(SS.current);
     finished = false;
 
-    if (goNext()) return;
+    if (!CFG.human && (await goNext())) return;
 
     ui.setStatus('Waiting for shop to load…', 'work');
     const loaded = await waitFor(() => shopLinks().length > 0, CFG.catalogTimeoutMs);
@@ -952,13 +1217,19 @@
     await pause(CFG.actionDelayMs);
     if (!alive()) return;
 
+    if (CFG.human) {
+      await dwell();
+      if (!alive()) return;
+      if (await goNext()) return;
+    }
+
     ss.del(SS.plan);
     const found = await scanShop(alive);
     if (!found) return;
 
     const bundles = found.filter((o) => o.bundle);
     const items = found.filter((o) => !o.bundle);
-    const queue = bundles.length ? bundles : items;
+    const queue = shuffled(bundles.length ? bundles : items);
     ui.log(`Found ${bundles.length} bundle(s), ${items.length} item(s)`, queue.length ? 'ok' : '');
 
     if (!queue.length) {
@@ -975,7 +1246,7 @@
       kind: bundles.length ? 'bundle' : 'item',
       createdAt: Date.now(),
     });
-    goNext();
+    await goNext();
   }
 
   async function run() {
@@ -1029,6 +1300,7 @@
     ss.del(SS.plan);
     ss.del(SS.current);
     ss.del(SS.attempts);
+    ss.del(SS.pace);
   }
 
   async function watch() {
@@ -1079,7 +1351,7 @@
       finished = false;
       failStreak = 0;
       navToken++;
-      if (isDetailPage()) navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
+      if (isDetailPage()) goCatalog();
       else kick(100);
     });
 
