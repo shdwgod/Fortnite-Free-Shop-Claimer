@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer (Fast)
 // @namespace    https://github.com/shdwgod
-// @version      1.4-fast
+// @version      1.6-fast-fix
 // @description  Automatically claims free bundles and items in the Fortnite Item Shop (bundles first, fast mode, works from a background tab).
 // @author       shdw
 // @match        https://www.fortnite.com/item-shop*
@@ -10,8 +10,6 @@
 // @grant        unsafeWindow
 // @run-at       document-start
 // @license MIT
-// @downloadURL https://update.greasyfork.org/scripts/606718/Fortnite%20Free%20Shop%20Claimer%20%28Fast%29.user.js
-// @updateURL https://update.greasyfork.org/scripts/606718/Fortnite%20Free%20Shop%20Claimer%20%28Fast%29.meta.js
 // ==/UserScript==
 (function () {
   'use strict';
@@ -36,6 +34,10 @@
     jitter: [0.3, 0.5],
 
     backgroundMode: true,
+
+    // dialog buttons (Continue / Confirm): max clicks per button and gap between them
+    dialogMaxClicks: 4,
+    dialogRetryMs: 2000,
 
     human: false,
     betweenOffersMs: [2500, 7000],
@@ -239,7 +241,8 @@
   const RX = {
     buy: /^(purchase|kup)/i,
     cont: /^(continue|kontynuuj|dalej)(?!\s+(shopping|zakupy))/i,
-    confirm: /^(confirm|potwierd[zź])/i,
+    // anchored at the end so the hidden OneTrust "Confirm My Choices" button does not match
+    confirm: /^(confirm(\s+purchase)?|potwierd[zź](\s+zakup)?)$/i,
     cancel: /cancel purchase|anuluj zakup/i,
     ownedLine: /^(owned|posiadane)/im,
     ownedTile: /(?:^|\n)\s*(?:owned|posiadane)\s*(?:\n|$)/i,
@@ -247,16 +250,30 @@
     priceFree: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|0)(?![\d.,])/i,
     priceAny: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|[\d.,]+)/i,
     freeLine: /(?:^|\n)\s*(?:FREE|DARMOWE|BEZPŁATNE)\s*(?:\n|$)/i,
-    freeWord: /^(?:free|darmowe|bezpłatne)$/i,
+    // lines that are tile badges, not titles
+    badgeLine: /^(?:new|nowe|nowo[sś][cć]|free|darmowe|bezp[łl]atne|sale|wyprzeda[zż]|hot|popular|limited(?:\s+time)?|[+\-]\d+%?)$/i,
   };
 
   const mainText = () => (document.querySelector('main') || document.body).innerText || '';
   const allButtons = () => Array.from(document.querySelectorAll('button, [role="button"]'));
-  const btnText = (b) => (b.innerText || '').trim();
+  const btnText = (b) => (b.innerText || b.textContent || '').trim();
+
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return false;
+    const st = getComputedStyle(el);
+    return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+  }
 
   function findButton(rx) {
     return allButtons().find(
-      (b) => rx.test(btnText(b)) && !b.disabled && b.getAttribute('aria-disabled') !== 'true'
+      (b) =>
+        rx.test(btnText(b)) &&
+        !b.disabled &&
+        b.getAttribute('aria-disabled') !== 'true' &&
+        !b.closest('#onetrust-consent-sdk, .onetrust-pc-dark-filter') &&
+        isVisible(b)
     );
   }
 
@@ -300,8 +317,15 @@
       .join(' ');
   }
 
-  function tileTitle(text) {
-    const line = text.split('\n').map((s) => s.trim()).find((s) => s && !RX.freeWord.test(s));
+  function tileTitle(a, text) {
+    const el = a && a.querySelector('[data-testid="item-title"]');
+    const direct = el && (el.innerText || el.textContent || '').trim();
+    if (direct) return direct;
+
+    const line = text
+      .split('\n')
+      .map((s) => s.trim())
+      .find((s) => s && !RX.badgeLine.test(s));
     return line || 'Item';
   }
 
@@ -322,7 +346,7 @@
       out.push({
         url: a.href,
         href,
-        title: tileTitle(text),
+        title: tileTitle(a, text),
         bundle: RX.bundle.test(tileSignals(a, text)),
       });
     }
@@ -396,6 +420,34 @@
     target.dispatchEvent(ev);
   }
 
+  // Full synthetic click (hover -> down -> up -> click) without moving the cursor.
+  // Many React/Epic UI handlers listen to pointer events, a bare el.click() is often ignored.
+  function pressClick(el) {
+    try {
+      if (!el || !el.isConnected) return;
+      try { el.focus({ preventScroll: true }); } catch (e) {}
+      const r = el.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.top + r.height / 2);
+      const hit = hitTarget(x, y);
+      const t = hit && (hit === el || el.contains(hit)) ? hit : el;
+
+      fire(t, 'pointerover', x, y);
+      fire(t, 'mouseover', x, y);
+      fire(t, 'pointermove', x, y);
+      fire(t, 'mousemove', x, y);
+      fire(t, 'pointerdown', x, y, { buttons: 1 });
+      fire(t, 'mousedown', x, y, { buttons: 1 });
+      fire(t, 'pointerup', x, y);
+      fire(t, 'mouseup', x, y);
+      fire(t, 'click', x, y, { detail: 1 });
+      touch();
+    } catch (err) {
+      console.warn('[FN Claimer] pressClick fallback', err);
+      try { el.click(); } catch (e) {}
+    }
+  }
+
   async function moveCursor(tx, ty) {
     const sx = cursor.x;
     const sy = cursor.y;
@@ -449,7 +501,7 @@
   }
 
   async function humanClick(el) {
-    if (!CFG.human) { el.click(); return; }
+    if (!CFG.human) { pressClick(el); return; }
     try {
       if (!el.isConnected) return;
       let r = el.getBoundingClientRect();
@@ -486,7 +538,7 @@
   const reactClick = (el) =>
     (CFG.human
       ? sleep(rand(350, 900)).then(() => humanClick(el))
-      : Promise.resolve(el.click())
+      : Promise.resolve(pressClick(el))
     ).catch(() => {});
 
   async function dwell() {
@@ -1087,21 +1139,28 @@
     await humanClick(findButton(RX.buy) || buyBtn);
     if (!alive()) return;
 
-    const clicked = new WeakSet();
+    // el -> { n: number of clicks, t: time of the last click }
+    const clicked = new WeakMap();
     let dialogSeen = false;
     let buyRetries = 0;
     let lastBuyClick = Date.now();
 
     await waitFor(() => {
       if (!alive()) return true;
+
       for (const rx of [RX.cont, RX.confirm]) {
         const b = findButton(rx);
-        if (b && !clicked.has(b)) {
-          clicked.add(b);
-          dialogSeen = true;
-          ui.setStatus(rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…', 'work');
-          reactClick(b);
-        }
+        if (!b) continue;
+        const c = clicked.get(b) || { n: 0, t: 0 };
+        // retry the same button if the first click was not accepted (modal still animating, handler not attached yet)
+        if (c.n >= CFG.dialogMaxClicks || Date.now() - c.t < CFG.dialogRetryMs) continue;
+        clicked.set(b, { n: c.n + 1, t: Date.now() });
+        dialogSeen = true;
+        ui.setStatus(
+          (rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…') + (c.n ? ` (try ${c.n + 1})` : ''),
+          'work'
+        );
+        reactClick(b);
       }
       if (ownedNow()) return true;
 
