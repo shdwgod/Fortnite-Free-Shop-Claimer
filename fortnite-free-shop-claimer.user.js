@@ -1,43 +1,51 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer
 // @namespace    https://github.com/shdwgod
-// @version      1.4
-// @description  Automatically claims free bundles and items in the Fortnite Item Shop (bundles first, human-like pacing, works from a background tab).
+// @version      1.7.1
+// @description  Claims free bundles and items in the Fortnite Item Shop for you. Starts paused and works from a background tab.
 // @author       shdw
+// @homepageURL  https://github.com/shdwgod/Fortnite-Free-Shop-Claimer
+// @supportURL   https://github.com/shdwgod/Fortnite-Free-Shop-Claimer/issues
+// @updateURL    https://github.com/shdwgod/Fortnite-Free-Shop-Claimer/raw/refs/heads/main/fortnite-free-shop-claimer.user.js
+// @downloadURL  https://github.com/shdwgod/Fortnite-Free-Shop-Claimer/raw/refs/heads/main/fortnite-free-shop-claimer.user.js
 // @match        https://www.fortnite.com/item-shop*
+// @icon         data:image/png;base64,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
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        unsafeWindow
 // @run-at       document-start
-// @license MIT
-// @downloadURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.user.js
-// @updateURL https://update.greasyfork.org/scripts/606630/Fortnite%20Free%20Shop%20Claimer.meta.js
+// @noframes
+// @license      MIT
 // ==/UserScript==
 (function () {
   'use strict';
 
   const CFG = {
-    actionDelayMs: 700,
-    scrollStepRatio: 0.8,
+    actionDelayMs: 300,
+    scrollStepRatio: 0.9,
     scrollDelayMs: 400,
     maxScrollSteps: 150,
 
     catalogTimeoutMs: 15000,
     detailTimeoutMs: 12000,
     purchaseTimeoutMs: 20000,
-    growTimeoutMs: 2500,
+    growTimeoutMs: 1500,
 
     maxReloads: 2,
     stuckMs: 60000,
     idleKickMs: 20000,
     planTtlMs: 30 * 60 * 1000,
 
-    maxLogLines: 4,
-    jitter: [0.7, 1.5],
+    maxLogLines: 5,
+    jitter: [0.3, 0.5],
 
     backgroundMode: true,
 
-    human: true,
+    // dialog buttons (Continue / Confirm): max clicks per button and gap between them
+    dialogMaxClicks: 4,
+    dialogRetryMs: 2000,
+
+    human: false,
     betweenOffersMs: [2500, 7000],
     thinkChance: 0.06,
     thinkMs: [1500, 4500],
@@ -47,6 +55,9 @@
   };
 
   const SS = {
+    // "running" flag lives in the tab (sessionStorage): a run survives page loads inside
+    // the tab, but every new tab / new browser session starts paused.
+    enabled: 'fn_claimer_enabled_tab',
     processed: 'fn_claimer_processed2',
     plan: 'fn_claimer_plan',
     current: 'fn_claimer_current',
@@ -58,7 +69,6 @@
     pace: 'fn_claimer_pace',
   };
   const GM_KEYS = {
-    enabled: 'fn_claimer_enabled',
     total: 'fn_claimer_total',
     pos: 'fn_claimer_pos',
     collapsed: 'fn_claimer_collapsed',
@@ -239,7 +249,8 @@
   const RX = {
     buy: /^(purchase|kup)/i,
     cont: /^(continue|kontynuuj|dalej)(?!\s+(shopping|zakupy))/i,
-    confirm: /^(confirm|potwierd[zź])/i,
+    // anchored at the end so the hidden OneTrust "Confirm My Choices" button does not match
+    confirm: /^(confirm(\s+purchase)?|potwierd[zź](\s+zakup)?)$/i,
     cancel: /cancel purchase|anuluj zakup/i,
     ownedLine: /^(owned|posiadane)/im,
     ownedTile: /(?:^|\n)\s*(?:owned|posiadane)\s*(?:\n|$)/i,
@@ -247,20 +258,35 @@
     priceFree: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|0)(?![\d.,])/i,
     priceAny: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|[\d.,]+)/i,
     freeLine: /(?:^|\n)\s*(?:FREE|DARMOWE|BEZPŁATNE)\s*(?:\n|$)/i,
-    freeWord: /^(?:free|darmowe|bezpłatne)$/i,
+    // lines that are tile badges, not titles
+    badgeLine: /^(?:new|nowe|nowo[sś][cć]|free|darmowe|bezp[łl]atne|sale|wyprzeda[zż]|hot|popular|limited(?:\s+time)?|[+\-]\d+%?)$/i,
   };
 
   const mainText = () => (document.querySelector('main') || document.body).innerText || '';
   const allButtons = () => Array.from(document.querySelectorAll('button, [role="button"]'));
-  const btnText = (b) => (b.innerText || '').trim();
+  const btnText = (b) => (b.innerText || b.textContent || '').trim();
+
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return false;
+    const st = getComputedStyle(el);
+    return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+  }
 
   function findButton(rx) {
     return allButtons().find(
-      (b) => rx.test(btnText(b)) && !b.disabled && b.getAttribute('aria-disabled') !== 'true'
+      (b) =>
+        rx.test(btnText(b)) &&
+        !b.disabled &&
+        b.getAttribute('aria-disabled') !== 'true' &&
+        !b.closest('#onetrust-consent-sdk, .onetrust-pc-dark-filter, #fn-claimer-host') &&
+        isVisible(b)
     );
   }
 
-  const hasCancelButton = () => allButtons().some((b) => RX.cancel.test(btnText(b)));
+  const hasCancelButton = () =>
+    allButtons().some((b) => RX.cancel.test(btnText(b)) && !b.closest('#fn-claimer-host'));
 
   const ownedNow = () => hasCancelButton() || (RX.ownedLine.test(mainText()) && !findButton(RX.buy));
 
@@ -300,8 +326,15 @@
       .join(' ');
   }
 
-  function tileTitle(text) {
-    const line = text.split('\n').map((s) => s.trim()).find((s) => s && !RX.freeWord.test(s));
+  function tileTitle(a, text) {
+    const el = a && a.querySelector('[data-testid="item-title"]');
+    const direct = el && (el.innerText || el.textContent || '').trim();
+    if (direct) return direct;
+
+    const line = text
+      .split('\n')
+      .map((s) => s.trim())
+      .find((s) => s && !RX.badgeLine.test(s));
     return line || 'Item';
   }
 
@@ -322,7 +355,7 @@
       out.push({
         url: a.href,
         href,
-        title: tileTitle(text),
+        title: tileTitle(a, text),
         bundle: RX.bundle.test(tileSignals(a, text)),
       });
     }
@@ -379,7 +412,7 @@
       },
       extra
     );
-    if (Ctor === PointerEvent) {
+    if (typeof PointerEvent === 'function' && Ctor === PointerEvent) {
       Object.assign(opts, {
         pointerId: 1,
         pointerType: 'mouse',
@@ -394,6 +427,34 @@
     try { ev = new Ctor(type, Object.assign({ view: pageWin }, opts)); }
     catch (e) { ev = new Ctor(type, opts); }
     target.dispatchEvent(ev);
+  }
+
+  // Full synthetic click (hover -> down -> up -> click) without moving the cursor.
+  // Many React/Epic UI handlers listen to pointer events, a bare el.click() is often ignored.
+  function pressClick(el) {
+    try {
+      if (!el || !el.isConnected) return;
+      try { el.focus({ preventScroll: true }); } catch (e) {}
+      const r = el.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.top + r.height / 2);
+      const hit = hitTarget(x, y);
+      const t = hit && (hit === el || el.contains(hit)) ? hit : el;
+
+      fire(t, 'pointerover', x, y);
+      fire(t, 'mouseover', x, y);
+      fire(t, 'pointermove', x, y);
+      fire(t, 'mousemove', x, y);
+      fire(t, 'pointerdown', x, y, { buttons: 1 });
+      fire(t, 'mousedown', x, y, { buttons: 1 });
+      fire(t, 'pointerup', x, y);
+      fire(t, 'mouseup', x, y);
+      fire(t, 'click', x, y, { detail: 1 });
+      touch();
+    } catch (err) {
+      console.warn('[FN Claimer] pressClick fallback', err);
+      try { el.click(); } catch (e) {}
+    }
   }
 
   async function moveCursor(tx, ty) {
@@ -449,7 +510,7 @@
   }
 
   async function humanClick(el) {
-    if (!CFG.human) { el.click(); return; }
+    if (!CFG.human) { pressClick(el); return; }
     try {
       if (!el.isConnected) return;
       let r = el.getBoundingClientRect();
@@ -486,7 +547,7 @@
   const reactClick = (el) =>
     (CFG.human
       ? sleep(rand(350, 900)).then(() => humanClick(el))
-      : Promise.resolve(el.click())
+      : Promise.resolve(pressClick(el))
     ).catch(() => {});
 
   async function dwell() {
@@ -543,167 +604,126 @@
     return link || null;
   }
 
+  /* ------------------------------------------------------------------ UI */
+
   const CSS = `
     :host { all: initial; }
-    * { box-sizing: border-box; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
 
     .panel {
-      --bg: #0f1120;
-      --card: #171a30;
-      --card-hi: #1e2240;
-      --line: rgba(255, 255, 255, .07);
-      --text: #f2f3ff;
-      --muted: #8d92b9;
-      --accent: #9a86ff;
-      --amber: #ffc857;
-      --mint: #5eead4;
-      --rose: #ff7a90;
+      --bg: #15171c;
+      --surface: #1d2027;
+      --surface-hi: #262a33;
+      --line: #2a2e38;
+      --text: #e8eaf0;
+      --muted: #8d93a3;
+      --accent: #2f6fe4;
+      --accent-hi: #3d7df2;
+      --ok: #3ecf8e;
+      --err: #f06a6a;
       --state: var(--muted);
-      position: fixed; top: 16px; right: 16px; width: 308px; z-index: 2147483647;
-      font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      position: fixed; right: 16px; bottom: 16px; width: 296px; z-index: 2147483647;
+      font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
       color: var(--text); background: var(--bg);
-      border: 1px solid var(--line); border-radius: 20px;
-      box-shadow: 0 28px 64px rgba(0, 0, 0, .6), 0 0 0 1px rgba(154, 134, 255, .08);
-      overflow: hidden; user-select: none;
+      border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+      overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased;
     }
-    .panel[data-kind="work"] { --state: var(--amber); }
-    .panel[data-kind="done"] { --state: var(--mint); }
-    .panel[data-kind="error"] { --state: var(--rose); }
+    .panel[data-kind="work"] { --state: #5b9bff; }
+    .panel[data-kind="done"] { --state: var(--ok); }
+    .panel[data-kind="error"] { --state: var(--err); }
 
-    .rail { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--state); opacity: .9; }
-    .panel[data-kind="work"] .rail {
-      background: linear-gradient(90deg, transparent 0, var(--amber) 50%, transparent 100%);
-      background-size: 60% 100%; background-repeat: no-repeat;
-      animation: sweep 1.3s ease-in-out infinite;
-    }
-    @keyframes sweep { from { background-position: -60% 0; } to { background-position: 160% 0; } }
-
-    .head { display: flex; align-items: center; gap: 12px; padding: 18px 14px 14px 16px; cursor: grab; }
+    .head { display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 12px; cursor: grab; }
     .head:active { cursor: grabbing; }
-    .logo {
-      flex: none; width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
-      color: #14102e; background: var(--accent);
-      box-shadow: 0 6px 18px rgba(154, 134, 255, .35);
-    }
+    .logo { flex: none; width: 30px; height: 30px; display: block; }
     .titles { flex: 1; min-width: 0; }
-    .title { font-size: 14.5px; font-weight: 650; letter-spacing: .005em; }
-    .subtitle { font-size: 11.5px; color: var(--muted); }
+    .title { font-size: 13.5px; font-weight: 600; }
+    .status { display: flex; align-items: center; gap: 7px; min-width: 0; margin-top: 1px; font-size: 12px; color: var(--muted); }
+    .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--state); }
+    .status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     .icon-btn {
-      all: unset; flex: none; cursor: pointer; width: 28px; height: 28px; border-radius: 9px;
-      display: grid; place-items: center; color: var(--muted); transition: background .15s, color .15s;
+      all: unset; box-sizing: border-box; flex: none; cursor: pointer; width: 28px; height: 28px; border-radius: 7px;
+      display: grid; place-items: center; color: var(--muted);
     }
-    .icon-btn:hover { background: var(--card-hi); color: var(--text); }
-    .icon-btn svg { transition: transform .2s ease; }
+    .icon-btn:hover { background: var(--surface-hi); color: var(--text); }
+    .icon-btn svg { transition: transform .15s ease; }
     .collapsed .icon-btn svg { transform: rotate(180deg); }
     .collapsed .body { display: none; }
-    .collapsed .head { padding-bottom: 16px; }
 
-    .body { padding: 0 14px 14px; display: grid; gap: 10px; }
+    .body { border-top: 1px solid var(--line); }
 
-    .hero {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 14px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
-    }
-    .total { font-size: 42px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-    .total-label { margin-top: 6px; font-size: 12px; color: var(--muted); }
-    .ring { position: relative; flex: none; width: 64px; height: 64px; }
-    .ring svg { width: 64px; height: 64px; transform: rotate(-90deg); }
-    .ring .track { fill: none; stroke: var(--card-hi); stroke-width: 5; }
-    .ring .fill {
-      fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round;
-      transition: stroke-dashoffset .25s ease;
-    }
-    .ring-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .progress { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+    .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-hi); overflow: hidden; }
+    .bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+    .panel[data-kind="done"] .bar i { background: var(--ok); }
+    .panel[data-kind="error"] .bar i { background: var(--err); }
+    .progress-label { min-width: 40px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-    .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .chip {
-      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-      padding: 10px 14px; border-radius: 13px; background: var(--card); border: 1px solid var(--line);
-    }
-    .chip span { color: var(--muted); font-size: 12px; }
-    .chip b { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+    .stat { padding: 10px 14px; }
+    .stat + .stat { border-left: 1px solid var(--line); }
+    .stat b { display: block; font-size: 18px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
+    .stat span { font-size: 11.5px; color: var(--muted); }
 
-    .status {
-      display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 13px;
-      background: var(--card); border: 1px solid var(--line); min-height: 42px;
-    }
-    .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--state); box-shadow: 0 0 0 4px color-mix(in srgb, var(--state) 18%, transparent); }
-    .panel[data-kind="work"] .dot { animation: pulse 1.1s ease-in-out infinite; }
-    @keyframes pulse { 50% { transform: scale(.7); opacity: .6; } }
-    .status-text { flex: 1; min-width: 0; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .feed { list-style: none; display: grid; align-content: start; gap: 5px; min-height: 118px; padding: 10px 14px; border-top: 1px solid var(--line); }
+    .feed li { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--muted); }
+    .feed time { flex: none; width: 52px; font-size: 11.5px; font-variant-numeric: tabular-nums; opacity: .7; }
+    .feed .msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .feed li.ok .msg { color: #7ddfb4; }
+    .feed li.err .msg { color: #f59a9a; }
+    .feed li.empty { display: block; }
 
-    .feed { list-style: none; padding: 2px 4px; display: grid; gap: 7px; min-height: 20px; }
-    .feed li { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--muted); }
-    .feed li::before { content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); opacity: .6; }
-    .feed li.ok::before { background: var(--mint); opacity: 1; }
-    .feed li.err::before { background: var(--rose); opacity: 1; }
-    .feed li:first-child { color: var(--text); }
-    .feed .msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .feed time { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; opacity: .65; }
-    .feed .empty::before { display: none; }
-
-    .switch-row {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line);
-    }
-    .switch-title { font-weight: 600; }
-    .switch-sub { font-size: 11.5px; color: var(--muted); }
-    .switch {
-      all: unset; cursor: pointer; flex: none; position: relative; width: 44px; height: 25px; border-radius: 999px;
-      background: var(--card-hi); border: 1px solid var(--line); transition: background .2s;
-    }
-    .switch::after {
-      content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 50%;
-      background: var(--muted); transition: transform .2s ease, background .2s;
-    }
-    .switch[aria-checked="true"] { background: var(--accent); }
-    .switch[aria-checked="true"]::after { transform: translateX(19px); background: #14102e; }
-
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .actions { display: flex; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
     .btn {
-      all: unset; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;
-      padding: 10px 12px; border-radius: 13px; font-weight: 600; font-size: 12.5px;
-      background: var(--card); border: 1px solid var(--line); color: var(--text);
-      transition: background .15s, border-color .15s;
+      all: unset; box-sizing: border-box; cursor: pointer; text-align: center;
+      padding: 8px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+      background: var(--surface); border: 1px solid var(--line); color: var(--text);
     }
-    .btn:hover { background: var(--card-hi); border-color: rgba(255, 255, 255, .16); }
+    .btn:hover { background: var(--surface-hi); }
+    .btn.primary { flex: 1; background: var(--accent); border-color: transparent; color: #fff; }
+    .btn.primary:hover { background: var(--accent-hi); }
+    .btn.primary.running { background: var(--surface); border-color: var(--line); color: var(--text); }
+    .btn.primary.running:hover { background: var(--surface-hi); }
+    .btn[disabled] { opacity: .4; cursor: default; pointer-events: none; }
 
-    .icon-btn:focus-visible, .btn:focus-visible, .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .icon-btn:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
 
     @media (prefers-reduced-motion: reduce) {
-      .dot, .rail { animation: none !important; }
       * { transition: none !important; }
     }
   `;
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const ICONS = {
-    gift: ['M20 12v10H4V12', 'M2 7h20v5H2z', 'M12 22V7', 'M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z', 'M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z'],
-    chevron: ['M6 15l6-6 6 6'],
-    scan: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'],
-    clear: ['M3 6h18', 'M8 6V4h8v2', 'M19 6l-1 14H6L5 6'],
+  const svgEl = (tag, attrs = {}) => {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+    return node;
   };
 
-  function icon(name, size = 16) {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', size);
-    svg.setAttribute('height', size);
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    for (const d of ICONS[name]) {
-      const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d', d);
-      svg.append(path);
-    }
+  // same artwork as the @icon of the script
+  function logoIcon() {
+    const bow = { fill: 'none', stroke: '#fff', 'stroke-width': 3.4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
+    const svg = svgEl('svg', { class: 'logo', viewBox: '0 0 64 64', 'aria-hidden': 'true' });
+    svg.append(
+      svgEl('rect', { width: 64, height: 64, rx: 14, fill: '#2f6fe4' }),
+      svgEl('rect', { x: 17, y: 31, width: 30, height: 22, rx: 2, fill: '#d6e3ff' }),
+      svgEl('rect', { x: 13, y: 24, width: 38, height: 9, rx: 2.5, fill: '#fff' }),
+      svgEl('rect', { x: 29.2, y: 24, width: 5.6, height: 29, fill: '#2f6fe4' }),
+      svgEl('path', Object.assign({ d: 'M32 24C27 11.5 15.5 12.5 19 20C20.5 23.2 27 24 32 24Z' }, bow)),
+      svgEl('path', Object.assign({ d: 'M32 24C37 11.5 48.5 12.5 45 20C43.5 23.2 37 24 32 24Z' }, bow))
+    );
     return svg;
   }
 
-  const RING_R = 27;
-  const RING_C = 2 * Math.PI * RING_R;
+  function chevronIcon() {
+    const svg = svgEl('svg', {
+      viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor',
+      'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+    svg.append(svgEl('path', { d: 'M6 9l6 6 6-6' }));
+    return svg;
+  }
 
   const ui = (() => {
     let host = null;
@@ -724,117 +744,104 @@
 
     const clock = () => new Date().toLocaleTimeString('en-GB', { hour12: false });
 
+    function placeAt(left, top) {
+      const w = el.panel.offsetWidth || 296;
+      el.panel.style.left = Math.min(Math.max(0, left), Math.max(0, window.innerWidth - w)) + 'px';
+      el.panel.style.top = Math.min(Math.max(0, top), Math.max(0, window.innerHeight - 48)) + 'px';
+      el.panel.style.right = 'auto';
+      el.panel.style.bottom = 'auto';
+    }
+
     function applyPos() {
       const pos = store.get(GM_KEYS.pos, null);
-      if (!pos || !el.panel) return;
-      el.panel.style.left = Math.min(Math.max(0, pos.x), window.innerWidth - 80) + 'px';
-      el.panel.style.top = Math.min(Math.max(0, pos.y), window.innerHeight - 40) + 'px';
-      el.panel.style.right = 'auto';
+      if (!pos || !el.panel || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
+      placeAt(pos.x, pos.y);
     }
 
     function enableDrag(handle) {
       handle.addEventListener('pointerdown', (e) => {
-        if (e.target.closest('button')) return;
+        if (e.button !== 0 || e.target.closest('button')) return;
         const rect = el.panel.getBoundingClientRect();
         const dx = e.clientX - rect.left;
         const dy = e.clientY - rect.top;
         handle.setPointerCapture(e.pointerId);
-        const move = (ev) => {
-          el.panel.style.left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - 80) + 'px';
-          el.panel.style.top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 40) + 'px';
-          el.panel.style.right = 'auto';
-        };
+        const move = (ev) => placeAt(ev.clientX - dx, ev.clientY - dy);
         const up = () => {
           handle.removeEventListener('pointermove', move);
           handle.removeEventListener('pointerup', up);
+          handle.removeEventListener('pointercancel', up);
           const r = el.panel.getBoundingClientRect();
           store.set(GM_KEYS.pos, { x: r.left, y: r.top });
         };
         handle.addEventListener('pointermove', move);
         handle.addEventListener('pointerup', up);
+        handle.addEventListener('pointercancel', up);
       });
     }
 
     function mount() {
-      if (!document.body) return;
-      if (host && host.isConnected) return;
-      if (host) { document.body.appendChild(host); return; }
+      // Mounted on <html>, not <body>: the site's framework can rebuild <body> while hydrating
+      // and that made the panel flicker or vanish.
+      const parent = document.documentElement;
+      if (!parent) return;
+      if (host) {
+        if (!host.isConnected) parent.appendChild(host);
+        return;
+      }
 
       host = h('div', { id: 'fn-claimer-host' });
       const root = host.attachShadow({ mode: 'open' });
       const style = document.createElement('style');
       style.textContent = CSS;
 
-      el.min = h('button', { class: 'icon-btn', title: 'Collapse', 'aria-label': 'Collapse panel' }, icon('chevron', 18));
+      el.min = h('button', { class: 'icon-btn', title: 'Collapse', 'aria-label': 'Collapse panel' }, chevronIcon());
+      el.dot = h('span', { class: 'dot' });
+      el.statusText = h('span', { class: 'status-text' }, 'Starting…');
+      el.status = h('div', { class: 'status', role: 'status' }, el.dot, el.statusText);
       el.head = h('div', { class: 'head' },
-        h('div', { class: 'logo' }, icon('gift', 19)),
-        h('div', { class: 'titles' },
-          h('div', { class: 'title' }, 'Free Shop Claimer'),
-          h('div', { class: 'subtitle' }, 'Fortnite Item Shop')
-        ),
+        logoIcon(),
+        h('div', { class: 'titles' }, h('div', { class: 'title' }, 'Free Shop Claimer'), el.status),
         el.min
       );
 
-      el.total = h('div', { class: 'total' }, '0');
-      el.ringFill = document.createElementNS(SVG_NS, 'circle');
-      el.ringFill.setAttribute('class', 'fill');
-      el.ringFill.setAttribute('cx', '32');
-      el.ringFill.setAttribute('cy', '32');
-      el.ringFill.setAttribute('r', String(RING_R));
-      el.ringFill.style.strokeDasharray = String(RING_C);
-      el.ringFill.style.strokeDashoffset = String(RING_C);
-      const ringTrack = document.createElementNS(SVG_NS, 'circle');
-      ringTrack.setAttribute('class', 'track');
-      ringTrack.setAttribute('cx', '32');
-      ringTrack.setAttribute('cy', '32');
-      ringTrack.setAttribute('r', String(RING_R));
-      const ringSvg = document.createElementNS(SVG_NS, 'svg');
-      ringSvg.setAttribute('viewBox', '0 0 64 64');
-      ringSvg.append(ringTrack, el.ringFill);
-      el.ringText = h('div', { class: 'ring-text' }, '–');
-      const ring = h('div', { class: 'ring', title: 'Scan progress / queue position' }, ringSvg, el.ringText);
+      el.barFill = h('i');
+      el.progressLabel = h('span', { class: 'progress-label' }, '–');
+      const progress = h('div', { class: 'progress' }, h('div', { class: 'bar' }, el.barFill), el.progressLabel);
 
-      const hero = h('div', { class: 'hero' },
-        h('div', {}, el.total, h('div', { class: 'total-label' }, 'Claimed all time')),
-        ring
-      );
-
+      el.total = h('b', {}, '0');
       el.session = h('b', {}, '0');
       el.skipped = h('b', {}, '0');
-      const chips = h('div', { class: 'chips' },
-        h('div', { class: 'chip' }, h('span', {}, 'This session'), el.session),
-        h('div', { class: 'chip' }, h('span', {}, 'Skipped'), el.skipped)
+      const stats = h('div', { class: 'stats' },
+        h('div', { class: 'stat' }, el.total, h('span', {}, 'All time')),
+        h('div', { class: 'stat' }, el.session, h('span', {}, 'Session')),
+        h('div', { class: 'stat' }, el.skipped, h('span', {}, 'Skipped'))
       );
-
-      el.dot = h('span', { class: 'dot' });
-      el.statusText = h('span', { class: 'status-text' }, 'Starting…');
-      el.status = h('div', { class: 'status', role: 'status', 'aria-live': 'polite' }, el.dot, el.statusText);
 
       el.feed = h('ul', { class: 'feed' });
 
-      el.switchSub = h('div', { class: 'switch-sub' }, 'On');
-      el.switchBtn = h('button', { class: 'switch', role: 'switch', 'aria-checked': 'true', 'aria-label': 'Auto-claim' });
-      const switchRow = h('div', { class: 'switch-row' },
-        h('div', {}, h('div', { class: 'switch-title' }, 'Auto-claim'), el.switchSub),
-        el.switchBtn
-      );
+      el.toggle = h('button', { class: 'btn primary' }, 'Start');
+      el.scan = h('button', { class: 'btn', title: 'Scan the shop again from the top' }, 'Rescan');
+      el.reset = h('button', { class: 'btn', title: 'Forget processed offers, the queue and the session counters' }, 'Reset');
+      const actions = h('div', { class: 'actions' }, el.toggle, el.scan, el.reset);
 
-      el.scan = h('button', { class: 'btn' }, icon('scan', 15), 'Rescan');
-      el.reset = h('button', { class: 'btn', title: 'Forget processed offers, the queue and the session counters' }, icon('clear', 15), 'Clear history');
-
-      el.body = h('div', { class: 'body' }, hero, chips, el.status, el.feed, switchRow, h('div', { class: 'actions' }, el.scan, el.reset));
-      el.panel = h('div', { class: 'panel' }, h('div', { class: 'rail' }), el.head, el.body);
+      el.body = h('div', { class: 'body' }, progress, stats, el.feed, actions);
+      el.panel = h('div', { class: 'panel' }, el.head, el.body);
       el.panel.dataset.kind = 'idle';
 
       el.min.addEventListener('click', () => {
         const collapsed = el.panel.classList.toggle('collapsed');
         el.min.title = collapsed ? 'Expand' : 'Collapse';
+        el.min.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
         store.set(GM_KEYS.collapsed, collapsed);
       });
-      if (store.get(GM_KEYS.collapsed, false)) el.panel.classList.add('collapsed');
+      if (store.get(GM_KEYS.collapsed, false)) {
+        el.panel.classList.add('collapsed');
+        el.min.title = 'Expand';
+        el.min.setAttribute('aria-label', 'Expand panel');
+      }
 
       root.append(style, el.panel);
-      document.body.appendChild(host);
+      parent.appendChild(host);
       enableDrag(el.head);
       applyPos();
       window.addEventListener('resize', applyPos);
@@ -844,26 +851,30 @@
     function renderFeed() {
       if (!el.feed) return;
       if (!logs.length) {
-        el.feed.replaceChildren(h('li', { class: 'empty' }, h('span', { class: 'msg' }, 'No activity yet')));
+        el.feed.replaceChildren(h('li', { class: 'empty' }, 'No activity yet'));
         return;
       }
       el.feed.replaceChildren(
-        ...logs.map((l) => h('li', { class: l.kind }, h('span', { class: 'msg', title: l.text }, l.text), h('time', {}, l.t)))
+        ...logs.map((l) => h('li', { class: l.kind }, h('time', {}, l.t), h('span', { class: 'msg', title: l.text }, l.text)))
       );
     }
 
     function setStatus(text, kind = 'idle') {
       touch();
       if (!el.panel) return;
-      el.statusText.textContent = text;
-      el.statusText.title = text;
-      el.panel.dataset.kind = kind;
+      if (el.statusText.textContent !== text) {
+        el.statusText.textContent = text;
+        el.statusText.title = text;
+      }
+      if (el.panel.dataset.kind !== kind) el.panel.dataset.kind = kind;
     }
 
     function setEnabled(enabled) {
       if (!el.panel) return;
-      el.switchBtn.setAttribute('aria-checked', String(enabled));
-      el.switchSub.textContent = enabled ? 'Running on every shop page' : 'Paused';
+      el.toggle.textContent = enabled ? 'Pause' : 'Start';
+      el.toggle.classList.toggle('running', enabled);
+      el.toggle.setAttribute('aria-pressed', String(enabled));
+      el.scan.disabled = !enabled;
     }
 
     function setStats(total, session, skipped) {
@@ -876,8 +887,8 @@
     function setProgress(fraction, label) {
       if (!el.panel) return;
       const f = Math.min(1, Math.max(0, fraction));
-      el.ringFill.style.strokeDashoffset = String(RING_C * (1 - f));
-      el.ringText.textContent = label != null ? label : Math.round(f * 100) + '%';
+      el.barFill.style.width = f * 100 + '%';
+      el.progressLabel.textContent = label != null ? label : Math.round(f * 100) + '%';
     }
 
     function log(text, kind = '') {
@@ -897,9 +908,11 @@
     return { mount, setStatus, setEnabled, setStats, setProgress, log, clearLogs, get el() { return el; } };
   })();
 
+  /* --------------------------------------------------------------- logic */
+
   const savedStats = ss.get(SS.stats, {});
   const state = {
-    enabled: store.get(GM_KEYS.enabled, true),
+    enabled: ss.get(SS.enabled, false) === true,
     total: store.get(GM_KEYS.total, store.get('fn_bot_v22_count', 0)),
     session: savedStats.session || 0,
     skipped: savedStats.skipped || 0,
@@ -1087,21 +1100,28 @@
     await humanClick(findButton(RX.buy) || buyBtn);
     if (!alive()) return;
 
-    const clicked = new WeakSet();
+    // el -> { n: number of clicks, t: time of the last click }
+    const clicked = new WeakMap();
     let dialogSeen = false;
     let buyRetries = 0;
     let lastBuyClick = Date.now();
 
     await waitFor(() => {
       if (!alive()) return true;
+
       for (const rx of [RX.cont, RX.confirm]) {
         const b = findButton(rx);
-        if (b && !clicked.has(b)) {
-          clicked.add(b);
-          dialogSeen = true;
-          ui.setStatus(rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…', 'work');
-          reactClick(b);
-        }
+        if (!b) continue;
+        const c = clicked.get(b) || { n: 0, t: 0 };
+        // retry the same button if the first click was not accepted (modal still animating, handler not attached yet)
+        if (c.n >= CFG.dialogMaxClicks || Date.now() - c.t < CFG.dialogRetryMs) continue;
+        clicked.set(b, { n: c.n + 1, t: Date.now() });
+        dialogSeen = true;
+        ui.setStatus(
+          (rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…') + (c.n ? ` (try ${c.n + 1})` : ''),
+          'work'
+        );
+        reactClick(b);
       }
       if (ownedNow()) return true;
 
@@ -1250,6 +1270,7 @@
   }
 
   async function run() {
+    if (!state.enabled) return;
     busy = true;
     touch();
     const myToken = navToken;
@@ -1283,15 +1304,18 @@
 
   function setEnabled(value) {
     state.enabled = value;
-    store.set(GM_KEYS.enabled, value);
+    ss.set(SS.enabled, value);
     navToken++;
     ui.setEnabled(value);
     if (value) {
-      ui.setStatus('Resuming…', 'work');
+      finished = false;
+      failStreak = 0;
+      ui.setStatus('Starting…', 'work');
+      ui.log('Started');
       kick(200);
     } else {
       ui.setStatus('Paused', 'idle');
-      ui.log('Auto-claim paused');
+      ui.log('Paused');
     }
   }
 
@@ -1339,18 +1363,20 @@
     ui.setEnabled(state.enabled);
     refreshStats();
     renderPlan();
-    ui.setStatus(state.enabled ? 'Starting…' : 'Paused', 'idle');
+    if (state.enabled) ui.setStatus('Resuming…', 'work');
+    else ui.setStatus('Paused. Press Start to begin.', 'idle');
 
-    ui.el.switchBtn.addEventListener('click', () => setEnabled(!state.enabled));
+    ui.el.toggle.addEventListener('click', () => setEnabled(!state.enabled));
 
     ui.el.scan.addEventListener('click', () => {
-      if (!state.enabled) return ui.log('Turn on auto-claim first');
+      if (!state.enabled) return;
       ss.del(SS.plan);
       ss.del(SS.current);
       ss.del(SS.attempts);
       finished = false;
       failStreak = 0;
       navToken++;
+      ui.log('Rescanning the shop');
       if (isDetailPage()) goCatalog();
       else kick(100);
     });
