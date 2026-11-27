@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Fortnite Free Shop Claimer" width="100%">
+  <img src="assets/banner2.png" alt="Fortnite Free Shop Claimer" width="100%">
 </p>
 
 # Fortnite Free Shop Claimer
