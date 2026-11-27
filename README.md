@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Fortnite Free Shop Claimer" width="100%">
+</p>
+
 # Fortnite Free Shop Claimer
 
 Userscript that claims everything marked **FREE** in the Fortnite Item Shop, so you don't have to click through every offer by hand.
