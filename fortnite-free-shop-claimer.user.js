@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer
 // @namespace    https://github.com/shdwgod
-// @version      1.7.1
+// @version      2.0.0
 // @description  Claims free bundles and items in the Fortnite Item Shop for you. Starts paused and works from a background tab.
 // @author       shdw
 // @homepageURL  https://github.com/shdwgod/Fortnite-Free-Shop-Claimer
@@ -41,7 +41,6 @@
 
     backgroundMode: true,
 
-    // dialog buttons (Continue / Confirm): max clicks per button and gap between them
     dialogMaxClicks: 4,
     dialogRetryMs: 2000,
 
@@ -55,8 +54,6 @@
   };
 
   const SS = {
-    // "running" flag lives in the tab (sessionStorage): a run survives page loads inside
-    // the tab, but every new tab / new browser session starts paused.
     enabled: 'fn_claimer_enabled_tab',
     processed: 'fn_claimer_processed2',
     plan: 'fn_claimer_plan',
@@ -220,6 +217,8 @@
   }
 
   const cleanUrl = (url) => url.split('?')[0].split('#')[0].replace(/\/+$/, '');
+  const urlSlug = (url) => cleanUrl(url).split('/').pop() || '';
+  const defaultCatalogUrl = () => location.origin + '/item-shop' + (location.search || '');
 
   const getProcessed = () => ss.get(SS.processed, []);
 
@@ -246,25 +245,69 @@
     ss.set(SS.attempts, map);
   }
 
+  // Multi-language fallback regexes covering all 14 Fortnite Item Shop locales:
+  // ar, de, en-US, es-ES, es-MX, fr, it, ja, ko, pl, pt-BR, ru, tr, zh-Hans
   const RX = {
-    buy: /^(purchase|kup)/i,
-    cont: /^(continue|kontynuuj|dalej)(?!\s+(shopping|zakupy))/i,
-    // anchored at the end so the hidden OneTrust "Confirm My Choices" button does not match
-    confirm: /^(confirm(\s+purchase)?|potwierd[zź](\s+zakup)?)$/i,
-    cancel: /cancel purchase|anuluj zakup/i,
-    ownedLine: /^(owned|posiadane)/im,
-    ownedTile: /(?:^|\n)\s*(?:owned|posiadane)\s*(?:\n|$)/i,
-    bundle: /bundle|pakiet|zestaw/i,
-    priceFree: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|0)(?![\d.,])/i,
-    priceAny: /(?:V-Bucks Price|Discounted V-Bucks Price|Cena w V-dolcach)\s*[\n:]*\s*(?:FREE|DARMOWE|BEZPŁATNE|[\d.,]+)/i,
-    freeLine: /(?:^|\n)\s*(?:FREE|DARMOWE|BEZPŁATNE)\s*(?:\n|$)/i,
-    // lines that are tile badges, not titles
-    badgeLine: /^(?:new|nowe|nowo[sś][cć]|free|darmowe|bezp[łl]atne|sale|wyprzeda[zż]|hot|popular|limited(?:\s+time)?|[+\-]\d+%?)$/i,
+    buy: /^(?:purchase|kup|kaufen|acheter|comprar|acquista|купить|satın\s*al|購入(?:する)?|구매(?:하기)?|购买|شراء)/i,
+    cont: /^(?:continue|kontynuuj|dalej|weiter|fortfahren|continuer|continuar|continua|продолжить|devam(?:\s*et)?|続行|続ける|계속|继续|متابعة)(?!\s+(?:shopping|zakupy|einkauf|achats|comprando))/i,
+    confirm: /^(?:confirm(?:\s+purchase)?|potwierd[zź](?:\s+zakup)?|kauf\s+bestätigen|bestätigen|confirmer(?:\s+l['’]achat)?|confirmar(?:\s+(?:la\s+)?compra)?|conferma(?:\s+acquisto)?|подтвердить(?:\s+покупку)?|satın\s*almayı\s+onayla|onayla|購入を確定|確定|구매\s*확인|확인|确认购买|确认|تأكيد\s+الشراء|تأكيد)$/i,
+    cancel: /cancel\s+purchase|anuluj\s+zakup|kauf\s+abbrechen|annuler\s+l['’]achat|cancelar\s+compra|annulla\s+acquisto|отменить\s+покупку|satın\s*almayı\s+iptal|購入をキャンセル|구매\s*취소|取消购买|إلغاء\s+الشراء/i,
+    dismiss: /^(?:cancel|close|back|anuluj|zamknij|wstecz|abbrechen|schließen|zurück|annuler|fermer|retour|cancelar|cerrar|volver|annulla|chiudi|indietro|отмена|закрыть|назад|iptal|kapat|geri|キャンセル|閉じる|戻る|취소|닫기|뒤로|取消|关闭|返回|إلغاء|إغلاق|رجوع)$/i,
+    ownedWord: /^(?:owned|posiadane|im\s+besitz|besessen|possédé|en\s+propiedad|adquirido|possuído|posseduto|приобретено|в\s+наличии|sahip\s+olunan|所有済み|보유\s*중|已拥有|مملوك)$/i,
+    freeWord: /^(?:free|darmowe|bezpłatne|kostenlos|gratis|gratuit|gratuito|бесплатно|ücretsiz|無料|무료|免费|مجاني|مجانًا|0)$/i,
+    bundle: /bundle|pakiet|zestaw|paket|lot|paquete|pacote|pacchetto|набор|バンドル|번들|捆绑包|حزمة/i,
   };
 
-  const mainText = () => (document.querySelector('main') || document.body).innerText || '';
+  /* ---------------------------------------- Language-independent router data */
+
+  function getLoaderData() {
+    try {
+      return pageWin.__reactRouterDataRouter?.state?.loaderData || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getCatalogMap() {
+    const ld = getLoaderData();
+    const cat = ld && ld['routes/item-shop._index']?.catalog;
+    if (!cat || !Array.isArray(cat.categories)) return null;
+
+    const map = new Map();
+    for (const c of cat.categories) {
+      for (const sec of c.sections || []) {
+        for (const og of sec.offerGroups || []) {
+          for (const it of og.items || []) {
+            if (it && it.urlName && !map.has(it.urlName)) map.set(it.urlName, it);
+          }
+        }
+      }
+    }
+    return map;
+  }
+
+  function getDetailOffer() {
+    const ld = getLoaderData();
+    if (!ld) return null;
+    const key = Object.keys(ld).find((k) => k !== 'root' && k !== 'routes/item-shop._index');
+    if (!key) return null;
+    const rd = ld[key];
+    if (!rd || typeof rd !== 'object') return null;
+
+    const obj = rd.item || rd.offer || rd.bundle || rd.jamTrack || rd.data || rd;
+    const pricing = obj?.forSale?.pricing || obj?.pricing || rd.pricing || null;
+    const ownershipStatus = obj?.ownershipStatus || rd.ownershipStatus || null;
+    if (!pricing && !ownershipStatus) return null;
+    return { ownershipStatus, pricing, assetType: obj?.assetType || null };
+  }
+
+  /* --------------------------------------------------- DOM & visibility helpers */
+
+  const mainRoot = () => document.querySelector('main') || document.body;
+  const mainText = () => (mainRoot() && mainRoot().innerText) || '';
   const allButtons = () => Array.from(document.querySelectorAll('button, [role="button"]'));
   const btnText = (b) => (b.innerText || b.textContent || '').trim();
+  const isIgnoredEl = (el) => !!el.closest('#onetrust-consent-sdk, .onetrust-pc-dark-filter, #fn-claimer-host');
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
@@ -274,29 +317,105 @@
     return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
   }
 
-  function findButton(rx) {
-    return allButtons().find(
-      (b) =>
-        rx.test(btnText(b)) &&
-        !b.disabled &&
-        b.getAttribute('aria-disabled') !== 'true' &&
-        !b.closest('#onetrust-consent-sdk, .onetrust-pc-dark-filter, #fn-claimer-host') &&
-        isVisible(b)
+  function isActionableBtn(b) {
+    return (
+      b &&
+      !b.disabled &&
+      b.getAttribute('aria-disabled') !== 'true' &&
+      !isIgnoredEl(b) &&
+      isVisible(b)
     );
+  }
+
+  function findButton(rx) {
+    return allButtons().find((b) => rx.test(btnText(b)) && isActionableBtn(b));
+  }
+
+  function findPurchaseButton() {
+    const byTestId = document.querySelector('[data-testid="purchase-button"]');
+    if (byTestId && isActionableBtn(byTestId)) return byTestId;
+    return findButton(RX.buy);
+  }
+
+  function findDialogPrimaryButton() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]')).filter(
+      (d) => !isIgnoredEl(d) && isVisible(d)
+    );
+    for (const dlg of dialogs) {
+      const btns = Array.from(dlg.querySelectorAll('button, [role="button"]')).filter(isActionableBtn);
+      // Prefer explicit submit or non-dismiss button with visible text
+      const candidates = btns.filter((b) => {
+        const t = btnText(b);
+        const aria = (b.getAttribute('aria-label') || '').trim();
+        if (!t) return false;
+        if (RX.cancel.test(t) || RX.dismiss.test(t) || RX.dismiss.test(aria)) return false;
+        return true;
+      });
+      if (candidates.length === 1) return candidates[0];
+      const submit = candidates.find((b) => b.getAttribute('type') === 'submit');
+      if (submit) return submit;
+      if (candidates.length > 1) return candidates[candidates.length - 1];
+    }
+    return null;
   }
 
   const hasCancelButton = () =>
     allButtons().some((b) => RX.cancel.test(btnText(b)) && !b.closest('#fn-claimer-host'));
 
-  const ownedNow = () => hasCancelButton() || (RX.ownedLine.test(mainText()) && !findButton(RX.buy));
+  function hasDomOwnedTag(scope = mainRoot()) {
+    if (!scope) return false;
+    const tags = scope.querySelectorAll('[data-testid="owned-tag"]');
+    for (const tag of tags) {
+      const t = (tag.innerText || tag.textContent || '').trim();
+      if (t) return true;
+    }
+    return false;
+  }
+
+  function hasDomFreePrice(scope = mainRoot()) {
+    if (!scope) return false;
+    if (scope.querySelector('[data-testid="real-price"]')) return false;
+    const cur = scope.querySelector('[data-testid="current-vbuck-price"]');
+    if (!cur) return false;
+    const t = (cur.innerText || cur.textContent || '').trim();
+    const hasIcon = !!cur.querySelector('[data-testid="VBucksIcon"]');
+    if (!hasIcon && t && !/\d/.test(t)) return true; // localized "Free" label
+    const num = t.replace(/[^\d]/g, '');
+    return num === '0' || RX.freeWord.test(t);
+  }
+
+  function hasDomPaidPrice(scope = mainRoot()) {
+    if (!scope) return false;
+    if (scope.querySelector('[data-testid="real-price"]')) return true;
+    const cur = scope.querySelector('[data-testid="current-vbuck-price"]');
+    if (!cur) return false;
+    return !!cur.querySelector('[data-testid="VBucksIcon"]') && /[1-9]/.test(cur.innerText || cur.textContent || '');
+  }
+
+  function ownedNow() {
+    const detail = getDetailOffer();
+    if (detail && detail.ownershipStatus === 'owned') return true;
+    if (hasCancelButton()) return true;
+    if (hasDomOwnedTag() && !findPurchaseButton()) return true;
+    const lines = mainText().split('\n').map((s) => s.trim()).filter(Boolean);
+    return lines.some((l) => RX.ownedWord.test(l)) && !findPurchaseButton();
+  }
 
   function readVerdict() {
-    if (hasCancelButton()) return 'owned';
-    const text = mainText();
-    const buy = findButton(RX.buy);
-    if (RX.priceFree.test(text)) return buy ? 'free' : null;
-    if (buy) return RX.priceAny.test(text) ? 'paid' : null;
-    return RX.ownedLine.test(text) && !RX.priceAny.test(text) ? 'owned' : null;
+    if (ownedNow()) return 'owned';
+
+    const detail = getDetailOffer();
+    const buy = findPurchaseButton();
+
+    if (detail && detail.pricing) {
+      const { finalPrice, currencyType } = detail.pricing;
+      if (currencyType === 'MtxCurrency' && finalPrice === 0) return buy ? 'free' : null;
+      if (currencyType === 'RealMoney' || (typeof finalPrice === 'number' && finalPrice > 0)) return 'paid';
+    }
+
+    if (hasDomFreePrice()) return buy ? 'free' : null;
+    if (buy && hasDomPaidPrice()) return 'paid';
+    return null;
   }
 
   function isDetailPage() {
@@ -305,7 +424,7 @@
     return (
       !!(cur && cleanUrl(cur.href) === cleanUrl(location.href)) ||
       /\/item-shop\/.+\/[a-z0-9-]{8,}/i.test(path) ||
-      /\/item-shop\/(offers|bundles|jam-tracks|outfits|emotes|pickaxes|wraps|kicks|wheels|sidekicks)\/[^/]+/i.test(path)
+      /\/item-shop\/(offers|bundles|jam-tracks|outfits|emotes|pickaxes|wraps|kicks|wheels|sidekicks|car-bodies|lego-kits|decor-bundles|decor-packs|builds|packs)\/[^/]+/i.test(path)
     );
   }
 
@@ -319,13 +438,6 @@
     });
   }
 
-  function tileSignals(a, text) {
-    const alts = Array.from(a.querySelectorAll('img[alt]')).map((i) => i.alt);
-    return [text, a.getAttribute('aria-label'), a.getAttribute('title'), ...alts, a.href]
-      .filter(Boolean)
-      .join(' ');
-  }
-
   function tileTitle(a, text) {
     const el = a && a.querySelector('[data-testid="item-title"]');
     const direct = el && (el.innerText || el.textContent || '').trim();
@@ -334,29 +446,54 @@
     const line = text
       .split('\n')
       .map((s) => s.trim())
-      .find((s) => s && !RX.badgeLine.test(s));
+      .find((s) => s && !RX.freeWord.test(s) && !RX.ownedWord.test(s));
     return line || 'Item';
+  }
+
+  function isTileBundle(a, catItem) {
+    if (catItem) {
+      if (catItem.assetType === 'dynamicbundle' || catItem.offerMainType === 'Bundle') return true;
+    }
+    if (a.querySelector('[data-testid="dynamicbundle-tile"]')) return true;
+    if (/\/item-shop\/(?:offers|bundles)\//i.test(a.href)) return true;
+    return RX.bundle.test(a.innerText || '');
   }
 
   function findCandidates() {
     const processed = getProcessed();
     const seen = new Set();
     const out = [];
+    const catalogMap = getCatalogMap();
 
     for (const a of shopLinks()) {
       const href = cleanUrl(a.href);
       if (seen.has(href) || processed.includes(href)) continue;
 
-      const text = (a.innerText || '').trim();
-      const free = RX.priceFree.test(text) || RX.freeLine.test(text);
-      if (!free || RX.ownedTile.test(text)) continue;
+      const slug = urlSlug(href);
+      const catItem = catalogMap ? catalogMap.get(slug) : null;
+
+      let isOwned = false;
+      let isFree = false;
+
+      if (catItem) {
+        isOwned = catItem.ownershipStatus === 'owned';
+        isFree =
+          !isOwned &&
+          catItem.pricing?.currencyType === 'MtxCurrency' &&
+          catItem.pricing?.finalPrice === 0;
+      } else {
+        isOwned = hasDomOwnedTag(a) || (a.innerText || '').split('\n').some((l) => RX.ownedWord.test(l.trim()));
+        isFree = !isOwned && hasDomFreePrice(a);
+      }
+
+      if (!isFree || isOwned) continue;
 
       seen.add(href);
       out.push({
         url: a.href,
         href,
-        title: tileTitle(a, text),
-        bundle: RX.bundle.test(tileSignals(a, text)),
+        title: (catItem && catItem.title) || tileTitle(a, (a.innerText || '').trim()),
+        bundle: isTileBundle(a, catItem),
       });
     }
     return out;
@@ -429,8 +566,6 @@
     target.dispatchEvent(ev);
   }
 
-  // Full synthetic click (hover -> down -> up -> click) without moving the cursor.
-  // Many React/Epic UI handlers listen to pointer events, a bare el.click() is often ignored.
   function pressClick(el) {
     try {
       if (!el || !el.isConnected) return;
@@ -701,7 +836,6 @@
     return node;
   };
 
-  // same artwork as the @icon of the script
   function logoIcon() {
     const bow = { fill: 'none', stroke: '#fff', 'stroke-width': 3.4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
     const svg = svgEl('svg', { class: 'logo', viewBox: '0 0 64 64', 'aria-hidden': 'true' });
@@ -780,8 +914,6 @@
     }
 
     function mount() {
-      // Mounted on <html>, not <body>: the site's framework can rebuild <body> while hydrating
-      // and that made the panel flicker or vanish.
       const parent = document.documentElement;
       if (!parent) return;
       if (host) {
@@ -983,7 +1115,7 @@
 
   async function goCatalog() {
     touch();
-    const url = ss.get(SS.catalog, location.origin + '/item-shop');
+    const url = ss.get(SS.catalog, defaultCatalogUrl());
     if (CFG.human) {
       const want = cleanUrl(url);
       const link = Array.from(document.querySelectorAll('a[href]')).find((a) => {
@@ -1031,7 +1163,7 @@
       return;
     }
 
-    if (!(await goNext())) await navigate(ss.get(SS.catalog, location.origin + '/item-shop'));
+    if (!(await goNext())) await navigate(ss.get(SS.catalog, defaultCatalogUrl()));
   }
 
   async function handleDetail(alive) {
@@ -1084,7 +1216,7 @@
       return finishOffer(offer, alive);
     }
 
-    const buyBtn = findButton(RX.buy) || (await waitFor(() => findButton(RX.buy), 4000));
+    const buyBtn = findPurchaseButton() || (await waitFor(findPurchaseButton, 4000));
     if (!alive()) return;
     if (!buyBtn) {
       skip(`No purchase button: ${offer.title}`);
@@ -1097,10 +1229,9 @@
     }
 
     ui.setStatus(`Claiming ${kind}: ${offer.title}`, 'work');
-    await humanClick(findButton(RX.buy) || buyBtn);
+    await humanClick(findPurchaseButton() || buyBtn);
     if (!alive()) return;
 
-    // el -> { n: number of clicks, t: time of the last click }
     const clicked = new WeakMap();
     let dialogSeen = false;
     let buyRetries = 0;
@@ -1109,24 +1240,30 @@
     await waitFor(() => {
       if (!alive()) return true;
 
-      for (const rx of [RX.cont, RX.confirm]) {
-        const b = findButton(rx);
-        if (!b) continue;
-        const c = clicked.get(b) || { n: 0, t: 0 };
-        // retry the same button if the first click was not accepted (modal still animating, handler not attached yet)
-        if (c.n >= CFG.dialogMaxClicks || Date.now() - c.t < CFG.dialogRetryMs) continue;
-        clicked.set(b, { n: c.n + 1, t: Date.now() });
-        dialogSeen = true;
-        ui.setStatus(
-          (rx === RX.cont ? 'Accepting warning…' : 'Confirming purchase…') + (c.n ? ` (try ${c.n + 1})` : ''),
-          'work'
-        );
-        reactClick(b);
+      let dlgBtn = findButton(RX.cont) || findButton(RX.confirm);
+      let isConfirm = dlgBtn ? RX.confirm.test(btnText(dlgBtn)) : false;
+
+      if (!dlgBtn) {
+        dlgBtn = findDialogPrimaryButton();
+        isConfirm = true;
+      }
+
+      if (dlgBtn) {
+        const c = clicked.get(dlgBtn) || { n: 0, t: 0 };
+        if (c.n < CFG.dialogMaxClicks && Date.now() - c.t >= CFG.dialogRetryMs) {
+          clicked.set(dlgBtn, { n: c.n + 1, t: Date.now() });
+          dialogSeen = true;
+          ui.setStatus(
+            (isConfirm ? 'Confirming purchase…' : 'Accepting warning…') + (c.n ? ` (try ${c.n + 1})` : ''),
+            'work'
+          );
+          reactClick(dlgBtn);
+        }
       }
       if (ownedNow()) return true;
 
       if (!dialogSeen && buyRetries < 2 && Date.now() - lastBuyClick > 4000) {
-        const again = findButton(RX.buy);
+        const again = findPurchaseButton();
         if (again) {
           buyRetries++;
           lastBuyClick = Date.now();
