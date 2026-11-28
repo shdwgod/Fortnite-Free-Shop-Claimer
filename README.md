@@ -42,7 +42,7 @@ Drag the header to move the panel, use the arrow to collapse it. Position and th
 2. Opens each offer, checks again that it is free and not owned, then clicks through purchase, warning and confirm dialogs.
 3. Counts the claim once the item shows as owned, then moves on. When the queue is empty it scans once more and stops.
 
-Works with English and Polish shop pages and keeps running in a background tab.
+Works with every language shop pages and keeps running in a background tab.
 
 ## Configuration
 
