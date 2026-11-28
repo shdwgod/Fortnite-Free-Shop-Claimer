@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fortnite Free Shop Claimer
 // @namespace    https://github.com/shdwgod
-// @version      2.0.0
+// @version      2.0.1
 // @description  Claims free bundles and items in the Fortnite Item Shop for you. Starts paused and works from a background tab.
 // @author       shdw
 // @homepageURL  https://github.com/shdwgod/Fortnite-Free-Shop-Claimer
@@ -245,51 +245,82 @@
     ss.set(SS.attempts, map);
   }
 
+  // Fold diacritics (preserving composed Hangul via NFC), Turkish ı/İ, Polish ł/Ł, and German ß
+  const foldTr = (s) =>
+    String(s || '')
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .normalize('NFC')
+      .replace(/[ıİ]/g, 'i')
+      .replace(/[łŁ]/g, 'l')
+      .replace(/ß/g, 'ss');
+  const testRx = (rx, s) => rx.test(foldTr(s));
+
   // Multi-language fallback regexes covering all 14 Fortnite Item Shop locales:
   // ar, de, en-US, es-ES, es-MX, fr, it, ja, ko, pl, pt-BR, ru, tr, zh-Hans
   const RX = {
-    buy: /^(?:purchase|kup|kaufen|acheter|comprar|acquista|купить|satın\s*al|購入(?:する)?|구매(?:하기)?|购买|شراء)/i,
-    cont: /^(?:continue|kontynuuj|dalej|weiter|fortfahren|continuer|continuar|continua|продолжить|devam(?:\s*et)?|続行|続ける|계속|继续|متابعة)(?!\s+(?:shopping|zakupy|einkauf|achats|comprando))/i,
-    confirm: /^(?:confirm(?:\s+purchase)?|potwierd[zź](?:\s+zakup)?|kauf\s+bestätigen|bestätigen|confirmer(?:\s+l['’]achat)?|confirmar(?:\s+(?:la\s+)?compra)?|conferma(?:\s+acquisto)?|подтвердить(?:\s+покупку)?|satın\s*almayı\s+onayla|onayla|購入を確定|確定|구매\s*확인|확인|确认购买|确认|تأكيد\s+الشراء|تأكيد)$/i,
-    cancel: /cancel\s+purchase|anuluj\s+zakup|kauf\s+abbrechen|annuler\s+l['’]achat|cancelar\s+compra|annulla\s+acquisto|отменить\s+покупку|satın\s*almayı\s+iptal|購入をキャンセル|구매\s*취소|取消购买|إلغاء\s+الشراء/i,
-    dismiss: /^(?:cancel|close|back|anuluj|zamknij|wstecz|abbrechen|schließen|zurück|annuler|fermer|retour|cancelar|cerrar|volver|annulla|chiudi|indietro|отмена|закрыть|назад|iptal|kapat|geri|キャンセル|閉じる|戻る|취소|닫기|뒤로|取消|关闭|返回|إلغاء|إغلاق|رجوع)$/i,
-    ownedWord: /^(?:owned|posiadane|im\s+besitz|besessen|possédé|en\s+propiedad|adquirido|possuído|posseduto|приобретено|в\s+наличии|sahip\s+olunan|所有済み|보유\s*중|已拥有|مملوك)$/i,
-    freeWord: /^(?:free|darmowe|bezpłatne|kostenlos|gratis|gratuit|gratuito|бесплатно|ücretsiz|無料|무료|免费|مجاني|مجانًا|0)$/i,
-    bundle: /bundle|pakiet|zestaw|paket|lot|paquete|pacote|pacchetto|набор|バンドル|번들|捆绑包|حزمة/i,
+    buy: /^(?:purchase|kup|kaufen|acheter|comprar|acquista|купить|satin\s*al|購入(?:する)?|구매(?:하기)?|购买|شراء)/i,
+    cont: /^(?:continue|kontynuuj|dalej|weiter|fortfahren|continuer|continuar|continua|продолжить|devam(?:\s+et)?|続行|続ける|계속|继续|متابعة)$/i,
+    confirm: /^(?:confirm(?:\s+purchase)?|potwierdz(?:\s+zakup)?|kauf\s+bestatigen|bestatigen|confirmer(?:\s+l['’]achat)?|confirmar(?:\s+(?:la\s+)?compra)?|conferma(?:\s+acquisto)?|подтвердить(?:\s+покупку)?|satin\s*almayi\s+onayla|onayla|購入を確定|確定|구매\s*확인|확인|确认购买|确认|تأكيد\s+الشراء|تأكيد)$/i,
+    cancel: /cancel\s+purchase|anuluj\s+zakup|kauf\s+abbrechen|annuler\s+l['’]achat|cancelar\s+compra|annulla\s+acquisto|отменить\s+покупку|satin\s*almayi\s+iptal|購入をキャンセル|구매\s*취소|取消购买|إلغاء\s+الشراء/i,
+    dismiss: /^(?:cancel|close|back|anuluj|zamknij|wstecz|abbrechen|schließen|zuruck|annuler|fermer|retour|cancelar|cerrar|volver|annulla|chiudi|indietro|отмена|закрыть|назад|iptal|kapat|geri|キャンセル|閉じる|戻る|취소|닫기|뒤로|取消|关闭|返回|إلغاء|إغلاق|رجوع)$/i,
+    ownedWord: /^(?:owned|posiadane|im\s+besitz|besessen|possede|en\s+propiedad|adquirido|possuido|posseduto|приобретено|в\s+наличии|sahip\s+olunan|所有済み|보유\s*중|已拥有|مملوك)$/i,
+    freeWord: /^(?:free|darmowe|bezplatne|kostenlos|gratis|gratuit|gratuito|бесплатно|ucretsiz|無料|무료|免费|مجاني|مجانا|0)$/i,
+    bundle: /bundle|pakiet|zestaw|paket|paquete|pacote|pacchetto|набор|バンドル|번들|捆绑包|حزمة/i,
+    badgeLine: /^(?:new!?|nowe|nowosc|neu|nouveau|nuevo|novo|nuovo|новое|yeni|新着|신규|新品|جديد|free|darmowe|bezplatne|kostenlos|gratis|gratuit|gratuito|бесплатно|ucretsiz|無料|무료|免费|مجاني|مجانا|sale|wyprzedaz|hot|popular|limited(?:\s+time)?|[+\-]\d+%?)$/i,
   };
+  for (const k of Object.keys(RX)) {
+    RX[k] = new RegExp(foldTr(RX[k].source), RX[k].flags);
+  }
 
   /* ---------------------------------------- Language-independent router data */
 
-  function getLoaderData() {
+  function getRouterState() {
     try {
-      return pageWin.__reactRouterDataRouter?.state?.loaderData || null;
+      return pageWin.__reactRouterDataRouter?.state || null;
     } catch (e) {
       return null;
     }
   }
 
+  function getLoaderData() {
+    return getRouterState()?.loaderData || null;
+  }
+
   function getCatalogMap() {
     const ld = getLoaderData();
-    const cat = ld && ld['routes/item-shop._index']?.catalog;
-    if (!cat || !Array.isArray(cat.categories)) return null;
-
+    if (!ld) return null;
     const map = new Map();
-    for (const c of cat.categories) {
-      for (const sec of c.sections || []) {
-        for (const og of sec.offerGroups || []) {
-          for (const it of og.items || []) {
-            if (it && it.urlName && !map.has(it.urlName)) map.set(it.urlName, it);
-          }
-        }
+    const seen = new WeakSet();
+    const walk = (o, d) => {
+      if (!o || typeof o !== 'object' || d > 12 || seen.has(o)) return;
+      seen.add(o);
+      if (Array.isArray(o)) {
+        for (let i = 0; i < o.length; i++) walk(o[i], d + 1);
+        return;
       }
+      if (o.urlName && o.ownershipStatus) {
+        const k = String(o.urlName).toLowerCase();
+        if (!map.has(k)) map.set(k, o);
+      }
+      for (const key of Object.keys(o)) walk(o[key], d + 1);
+    };
+    for (const key of Object.keys(ld)) {
+      if (key !== 'root') walk(ld[key], 0);
     }
-    return map;
+    return map.size ? map : null;
   }
 
   function getDetailOffer() {
-    const ld = getLoaderData();
+    const st = getRouterState();
+    const ld = st?.loaderData;
     if (!ld) return null;
-    const key = Object.keys(ld).find((k) => k !== 'root' && k !== 'routes/item-shop._index');
+    if (st.navigation && st.navigation.state !== 'idle') return null;
+    if (st.location?.pathname && cleanUrl(st.location.pathname) !== cleanUrl(location.pathname)) return null;
+
+    const key = Object.keys(ld)
+      .filter((k) => k !== 'root' && k !== 'routes/item-shop._index')
+      .pop();
     if (!key) return null;
     const rd = ld[key];
     if (!rd || typeof rd !== 'object') return null;
@@ -301,11 +332,19 @@
     return { ownershipStatus, pricing, assetType: obj?.assetType || null };
   }
 
+  function priceState() {
+    const d = getDetailOffer();
+    if (d?.ownershipStatus === 'owned') return 'owned';
+    const p = d?.pricing;
+    if (!p) return null;
+    return p.currencyType === 'MtxCurrency' && p.finalPrice === 0 ? 'free' : 'paid';
+  }
+
   /* --------------------------------------------------- DOM & visibility helpers */
 
   const mainRoot = () => document.querySelector('main') || document.body;
   const mainText = () => (mainRoot() && mainRoot().innerText) || '';
-  const allButtons = () => Array.from(document.querySelectorAll('button, [role="button"]'));
+  const allButtons = (root = document) => Array.from(root.querySelectorAll('button, [role="button"]'));
   const btnText = (b) => (b.innerText || b.textContent || '').trim();
   const isIgnoredEl = (el) => !!el.closest('#onetrust-consent-sdk, .onetrust-pc-dark-filter, #fn-claimer-host');
 
@@ -327,14 +366,15 @@
     );
   }
 
-  function findButton(rx) {
-    return allButtons().find((b) => rx.test(btnText(b)) && isActionableBtn(b));
+  function findButton(rx, root = document) {
+    return allButtons(root).find((b) => isActionableBtn(b) && testRx(rx, btnText(b)));
   }
 
   function findPurchaseButton() {
-    const byTestId = document.querySelector('[data-testid="purchase-button"]');
+    const scope = mainRoot();
+    const byTestId = scope && scope.querySelector('[data-testid="purchase-button"]');
     if (byTestId && isActionableBtn(byTestId)) return byTestId;
-    return findButton(RX.buy);
+    return findButton(RX.buy, scope || document);
   }
 
   function findDialogPrimaryButton() {
@@ -342,30 +382,45 @@
       (d) => !isIgnoredEl(d) && isVisible(d)
     );
     for (const dlg of dialogs) {
-      const btns = Array.from(dlg.querySelectorAll('button, [role="button"]')).filter(isActionableBtn);
-      // Prefer explicit submit or non-dismiss button with visible text
+      // Never auto-click inside a dialog that displays real money or non-zero V-Bucks price
+      if (dlg.querySelector('[data-testid="real-price"]')) continue;
+      const vbuckCur = dlg.querySelector('[data-testid="current-vbuck-price"]');
+      if (vbuckCur && /[1-9]/.test(vbuckCur.innerText || vbuckCur.textContent || '')) continue;
+
+      const btns = allButtons(dlg).filter(isActionableBtn);
       const candidates = btns.filter((b) => {
         const t = btnText(b);
         const aria = (b.getAttribute('aria-label') || '').trim();
         if (!t) return false;
-        if (RX.cancel.test(t) || RX.dismiss.test(t) || RX.dismiss.test(aria)) return false;
+        if (testRx(RX.cancel, t) || testRx(RX.dismiss, t) || testRx(RX.dismiss, aria)) {
+          return false;
+        }
         return true;
       });
       if (candidates.length === 1) return candidates[0];
-      const submit = candidates.find((b) => b.getAttribute('type') === 'submit');
-      if (submit) return submit;
-      if (candidates.length > 1) return candidates[candidates.length - 1];
+      const submits = candidates.filter((b) => b.getAttribute('type') === 'submit');
+      if (submits.length === 1) return submits[0];
     }
     return null;
   }
 
   const hasCancelButton = () =>
-    allButtons().some((b) => RX.cancel.test(btnText(b)) && !b.closest('#fn-claimer-host'));
+    allButtons().some(
+      (b) =>
+        testRx(RX.cancel, btnText(b)) &&
+        !b.closest('#fn-claimer-host, [role="dialog"], [aria-modal="true"]')
+    );
+
+  function scopeEls(selector, scope) {
+    if (!scope) return [];
+    const els = Array.from(scope.querySelectorAll(selector));
+    // On detail pages (scope === mainRoot()), ignore nested offer tiles inside <a href>
+    if (scope.tagName === 'A' || scope.closest('a[href]')) return els;
+    return els.filter((el) => !el.closest('a[href]'));
+  }
 
   function hasDomOwnedTag(scope = mainRoot()) {
-    if (!scope) return false;
-    const tags = scope.querySelectorAll('[data-testid="owned-tag"]');
-    for (const tag of tags) {
+    for (const tag of scopeEls('[data-testid="owned-tag"]', scope)) {
       const t = (tag.innerText || tag.textContent || '').trim();
       if (t) return true;
     }
@@ -374,20 +429,21 @@
 
   function hasDomFreePrice(scope = mainRoot()) {
     if (!scope) return false;
-    if (scope.querySelector('[data-testid="real-price"]')) return false;
-    const cur = scope.querySelector('[data-testid="current-vbuck-price"]');
+    if (scopeEls('[data-testid="real-price"]', scope).length) return false;
+    const cur = scopeEls('[data-testid="current-vbuck-price"]', scope)[0];
     if (!cur) return false;
     const t = (cur.innerText || cur.textContent || '').trim();
+    if (!t) return false;
     const hasIcon = !!cur.querySelector('[data-testid="VBucksIcon"]');
-    if (!hasIcon && t && !/\d/.test(t)) return true; // localized "Free" label
     const num = t.replace(/[^\d]/g, '');
-    return num === '0' || RX.freeWord.test(t);
+    if (hasIcon) return num === '0';
+    return num === '0' || testRx(RX.freeWord, t);
   }
 
   function hasDomPaidPrice(scope = mainRoot()) {
     if (!scope) return false;
-    if (scope.querySelector('[data-testid="real-price"]')) return true;
-    const cur = scope.querySelector('[data-testid="current-vbuck-price"]');
+    if (scopeEls('[data-testid="real-price"]', scope).length) return true;
+    const cur = scopeEls('[data-testid="current-vbuck-price"]', scope)[0];
     if (!cur) return false;
     return !!cur.querySelector('[data-testid="VBucksIcon"]') && /[1-9]/.test(cur.innerText || cur.textContent || '');
   }
@@ -398,20 +454,19 @@
     if (hasCancelButton()) return true;
     if (hasDomOwnedTag() && !findPurchaseButton()) return true;
     const lines = mainText().split('\n').map((s) => s.trim()).filter(Boolean);
-    return lines.some((l) => RX.ownedWord.test(l)) && !findPurchaseButton();
+    return lines.some((l) => testRx(RX.ownedWord, l)) && !findPurchaseButton();
   }
 
-  function readVerdict() {
+  function readVerdict(allowDomFallback = true) {
     if (ownedNow()) return 'owned';
 
-    const detail = getDetailOffer();
+    const ps = priceState();
     const buy = findPurchaseButton();
 
-    if (detail && detail.pricing) {
-      const { finalPrice, currencyType } = detail.pricing;
-      if (currencyType === 'MtxCurrency' && finalPrice === 0) return buy ? 'free' : null;
-      if (currencyType === 'RealMoney' || (typeof finalPrice === 'number' && finalPrice > 0)) return 'paid';
-    }
+    if (ps === 'free') return buy ? 'free' : null;
+    if (ps === 'paid') return 'paid';
+
+    if (!allowDomFallback) return null;
 
     if (hasDomFreePrice()) return buy ? 'free' : null;
     if (buy && hasDomPaidPrice()) return 'paid';
@@ -446,7 +501,7 @@
     const line = text
       .split('\n')
       .map((s) => s.trim())
-      .find((s) => s && !RX.freeWord.test(s) && !RX.ownedWord.test(s));
+      .find((s) => s && !testRx(RX.badgeLine, s) && !testRx(RX.freeWord, s) && !testRx(RX.ownedWord, s));
     return line || 'Item';
   }
 
@@ -456,7 +511,8 @@
     }
     if (a.querySelector('[data-testid="dynamicbundle-tile"]')) return true;
     if (/\/item-shop\/(?:offers|bundles)\//i.test(a.href)) return true;
-    return RX.bundle.test(a.innerText || '');
+    const tag = a.querySelector('[data-testid="tag-banner"]');
+    return !!(tag && testRx(RX.bundle, tag.innerText || tag.textContent || ''));
   }
 
   function findCandidates() {
@@ -469,21 +525,26 @@
       const href = cleanUrl(a.href);
       if (seen.has(href) || processed.includes(href)) continue;
 
-      const slug = urlSlug(href);
+      let slug = urlSlug(href);
+      try { slug = decodeURIComponent(slug).toLowerCase(); } catch (e) { slug = slug.toLowerCase(); }
       const catItem = catalogMap ? catalogMap.get(slug) : null;
 
       let isOwned = false;
       let isFree = false;
 
-      if (catItem) {
+      if (catItem && catItem.ownershipStatus) {
         isOwned = catItem.ownershipStatus === 'owned';
-        isFree =
-          !isOwned &&
-          catItem.pricing?.currencyType === 'MtxCurrency' &&
-          catItem.pricing?.finalPrice === 0;
       } else {
-        isOwned = hasDomOwnedTag(a) || (a.innerText || '').split('\n').some((l) => RX.ownedWord.test(l.trim()));
-        isFree = !isOwned && hasDomFreePrice(a);
+        isOwned = hasDomOwnedTag(a) || (a.innerText || '').split('\n').some((l) => testRx(RX.ownedWord, l.trim()));
+      }
+
+      if (!isOwned) {
+        const pr = catItem && (catItem.pricing || catItem.forSale?.pricing);
+        if (pr && typeof pr.finalPrice === 'number') {
+          isFree = pr.currencyType === 'MtxCurrency' && pr.finalPrice === 0;
+        } else {
+          isFree = hasDomFreePrice(a);
+        }
       }
 
       if (!isFree || isOwned) continue;
@@ -1171,14 +1232,18 @@
     const stored = ss.get(SS.current, null);
     const offer = stored && cleanUrl(stored.href) === cleanUrl(url)
       ? stored
-      : { url, href: cleanUrl(url), title: pageTitle(), bundle: RX.bundle.test(url) };
+      : { url, href: cleanUrl(url), title: pageTitle(), bundle: /\/item-shop\/(?:offers|bundles)\//i.test(url) };
     const kind = offer.bundle ? 'bundle' : 'item';
     const attemptKey = 'detail:' + offer.href;
+    const detailEnteredAt = Date.now();
 
     renderPlan();
     ui.setStatus(`Checking ${kind}: ${offer.title}`, 'work');
 
-    let verdict = await waitFor(readVerdict, CFG.detailTimeoutMs);
+    let verdict = await waitFor(
+      () => readVerdict(Date.now() - detailEnteredAt >= 2500),
+      CFG.detailTimeoutMs
+    );
     if (!alive()) return;
     if (!verdict && ownedNow()) verdict = 'owned';
 
@@ -1199,12 +1264,12 @@
 
     await pause(CFG.actionDelayMs);
     if (!alive()) return;
-    verdict = readVerdict() || verdict;
+    verdict = readVerdict(true) || verdict;
 
     if (verdict === 'paid') {
       await pause(1200);
       if (!alive()) return;
-      verdict = readVerdict() || verdict;
+      verdict = readVerdict(true) || verdict;
     }
 
     if (verdict === 'owned') {
@@ -1228,7 +1293,16 @@
       if (!alive()) return;
     }
 
+    // Hard price guard immediately before clicking Purchase
+    const initialPs = priceState();
+    const hadData = initialPs !== null;
+    if (initialPs === 'paid' || hasDomPaidPrice()) {
+      skip(`Not free: ${offer.title}`);
+      return finishOffer(offer, alive);
+    }
+
     ui.setStatus(`Claiming ${kind}: ${offer.title}`, 'work');
+    const purchaseClickedAt = Date.now();
     await humanClick(findPurchaseButton() || buyBtn);
     if (!alive()) return;
 
@@ -1236,30 +1310,51 @@
     let dialogSeen = false;
     let buyRetries = 0;
     let lastBuyClick = Date.now();
+    let aborted = false;
 
     await waitFor(() => {
       if (!alive()) return true;
+      if (ownedNow()) return true;
 
-      let dlgBtn = findButton(RX.cont) || findButton(RX.confirm);
-      let isConfirm = dlgBtn ? RX.confirm.test(btnText(dlgBtn)) : false;
+      const ps = priceState();
+      if (ps === 'paid' || hasDomPaidPrice()) {
+        aborted = true;
+        return true;
+      }
+      if (hadData && ps === null) return false;
 
-      if (!dlgBtn) {
-        dlgBtn = findDialogPrimaryButton();
-        isConfirm = true;
+      let matchedKnown = false;
+      for (const [rx, isConfirm] of [
+        [RX.cont, false],
+        [RX.confirm, true],
+      ]) {
+        const b = findButton(rx);
+        if (!b) continue;
+        matchedKnown = true;
+        const c = clicked.get(b) || { n: 0, t: 0 };
+        if (c.n >= CFG.dialogMaxClicks || Date.now() - c.t < CFG.dialogRetryMs) continue;
+        clicked.set(b, { n: c.n + 1, t: Date.now() });
+        dialogSeen = true;
+        ui.setStatus(
+          (isConfirm ? 'Confirming purchase…' : 'Accepting warning…') + (c.n ? ` (try ${c.n + 1})` : ''),
+          'work'
+        );
+        reactClick(b);
       }
 
-      if (dlgBtn) {
-        const c = clicked.get(dlgBtn) || { n: 0, t: 0 };
-        if (c.n < CFG.dialogMaxClicks && Date.now() - c.t >= CFG.dialogRetryMs) {
-          clicked.set(dlgBtn, { n: c.n + 1, t: Date.now() });
-          dialogSeen = true;
-          ui.setStatus(
-            (isConfirm ? 'Confirming purchase…' : 'Accepting warning…') + (c.n ? ` (try ${c.n + 1})` : ''),
-            'work'
-          );
-          reactClick(dlgBtn);
+      if (!matchedKnown && Date.now() - purchaseClickedAt >= 2500) {
+        const b = findDialogPrimaryButton();
+        if (b) {
+          const c = clicked.get(b) || { n: 0, t: 0 };
+          if (c.n < CFG.dialogMaxClicks && Date.now() - c.t >= CFG.dialogRetryMs) {
+            clicked.set(b, { n: c.n + 1, t: Date.now() });
+            dialogSeen = true;
+            ui.setStatus('Confirming purchase…' + (c.n ? ` (try ${c.n + 1})` : ''), 'work');
+            reactClick(b);
+          }
         }
       }
+
       if (ownedNow()) return true;
 
       if (!dialogSeen && buyRetries < 2 && Date.now() - lastBuyClick > 4000) {
@@ -1275,7 +1370,8 @@
     }, CFG.purchaseTimeoutMs, 400);
     if (!alive()) return;
 
-    if (ownedNow()) claimed(offer.title);
+    if (aborted) skip(`Aborted (paid offer): ${offer.title}`, 'err');
+    else if (ownedNow()) claimed(offer.title);
     else skip(`Purchase not confirmed: ${offer.title}`, 'err');
 
     await pause(900);
@@ -1381,6 +1477,15 @@
     }
 
     ss.del(SS.plan);
+    const catMap = getCatalogMap();
+    const links = shopLinks();
+    const matched = catMap
+      ? links.filter((a) => {
+          let s = urlSlug(a.href);
+          try { s = decodeURIComponent(s).toLowerCase(); } catch (e) { s = s.toLowerCase(); }
+          return catMap.has(s);
+        }).length
+      : 0;
     const found = await scanShop(alive);
     if (!found) return;
 
